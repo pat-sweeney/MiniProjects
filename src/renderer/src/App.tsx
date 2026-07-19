@@ -599,7 +599,13 @@ export default function App(): JSX.Element {
       }
       const paths = await searchMedia({ q })
       const matchSet = new Set(paths)
-      const subset = allMediaRef.current.filter((m) => matchSet.has(m.id))
+      const ql = q.toLowerCase()
+      const subset = allMediaRef.current.filter(
+        (m) =>
+          matchSet.has(m.id) ||
+          m.name.toLowerCase().includes(ql) ||
+          m.relPath.toLowerCase().includes(ql)
+      )
       setSearchCount(subset.length)
       if (subset.length === 0) {
         showToast(`No matches for “${q}”`)
