@@ -8,6 +8,7 @@ import {
   TransitionType
 } from '../../shared/types'
 import Controls from './components/Controls'
+import FileTree from './components/FileTree'
 import SettingsPanel from './components/SettingsPanel'
 import MetadataPanel from './components/MetadataPanel'
 import MediaView from './components/MediaView'
@@ -44,6 +45,7 @@ export default function App(): JSX.Element {
   const [playing, setPlaying] = useState(true)
   const [faces, setFaces] = useState<FaceBox[]>([])
   const [showSettings, setShowSettings] = useState(false)
+  const [showTree, setShowTree] = useState(true)
   const [showMetadata, setShowMetadata] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [toast, setToast] = useState('')
@@ -130,6 +132,7 @@ export default function App(): JSX.Element {
 
   const next = useCallback(() => go(1), [go])
   const prev = useCallback(() => go(-1), [go])
+  const goToIndex = useCallback((i: number) => go(i, true), [go])
 
   // ---- Auto-advance timer (images only; videos self-advance) ----
   useEffect(() => {
@@ -306,6 +309,7 @@ export default function App(): JSX.Element {
           break
         case 'e': case 'E': setShowMetadata((v) => !v); break
         case 's': case 'S': setShowSettings((v) => !v); break
+        case 't': case 'T': setShowTree((v) => !v); break
         case 'v': case 'V': toggleVoice(); break
         default: break
       }
@@ -339,7 +343,14 @@ export default function App(): JSX.Element {
   const tms = { ['--tms' as any]: `${settings.transitionMs}ms` } as React.CSSProperties
 
   return (
-    <div className="app">
+    <div className={'app' + (showTree ? ' tree-open' : '')}>
+      <FileTree
+        items={media}
+        currentId={current?.id}
+        open={showTree}
+        onSelect={goToIndex}
+        onToggle={() => setShowTree((v) => !v)}
+      />
       <div className="stage" style={tms}>
         {prevItem && settings.transition !== 'none' && (
           <div className={`layer ${leave}`} key={`prev-${animKey}`}>

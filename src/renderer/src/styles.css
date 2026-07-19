@@ -58,6 +58,88 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px
   inset: 0;
   background: #000;
   overflow: hidden;
+  transition: left 0.25s ease;
+}
+.app.tree-open .stage { left: 280px; }
+.app.tree-open .controls { left: 280px; }
+
+/* ---------- File tree pane ---------- */
+.filetree {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 280px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(0);
+  transition: transform 0.25s ease;
+}
+.filetree.hidden {
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+.filetree-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.filetree-title { font-size: 13px; color: var(--muted); font-weight: 600; }
+.filetree-hide { padding: 4px 10px; min-width: 0; }
+.filetree-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 6px 0;
+  font-size: 13px;
+}
+.filetree-empty { padding: 16px 12px; color: var(--muted); }
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  user-select: none;
+}
+.tree-row:hover { background: var(--panel-2); }
+.tree-row.current { background: rgba(91, 140, 255, 0.22); color: #fff; }
+.tree-row.folder { color: var(--text); }
+.tree-icon { flex: 0 0 auto; width: 16px; text-align: center; }
+.tree-name { overflow: hidden; text-overflow: ellipsis; }
+
+/* Reveal strip + button shown only on hover when the tree is hidden */
+.tree-reveal {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 22px;
+  z-index: 26;
+}
+.tree-show {
+  position: absolute;
+  top: 12px;
+  left: 8px;
+  padding: 6px 8px;
+  min-width: 0;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.tree-reveal:hover .tree-show,
+.tree-show:focus-visible {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .layer {
