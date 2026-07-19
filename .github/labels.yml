@@ -47,6 +47,9 @@
 - name: documentation
   color: "0075ca"
   description: Documentation changes
+- name: dependencies
+  color: "0366d6"
+  description: Dependency updates (Dependabot)
 - name: ignore-for-release
   color: "cccccc"
   description: Exclude from generated release notes

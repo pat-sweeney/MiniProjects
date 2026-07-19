@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # Node / Electron front-end dependencies
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - build
+    groups:
+      electron:
+        patterns:
+          - electron
+          - electron-*
+      react:
+        patterns:
+          - react
+          - react-*
+          - '@types/react*'
+
+  # Python sidecar dependencies
+  - package-ecosystem: pip
+    directory: /python
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - faces
+
+  # GitHub Actions used by our workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - ci
