@@ -353,6 +353,8 @@ export default function App(): JSX.Element {
     const { media: m, index: i } = stateRef.current
     const it = m[i]
     if (!it || it.kind !== 'image') return
+    // Stop auto-advance so the image doesn't change mid-detection/editing.
+    setPlaying(false)
     if (!faceAvailable) {
       showToast('Face detection unavailable — install the Python sidecar')
       return
@@ -433,6 +435,8 @@ export default function App(): JSX.Element {
       const { media: m, index: i, faces: cur } = stateRef.current
       const it = m[i]
       if (!it || it.kind !== 'image') return
+      // Stop auto-advance so the image doesn't change while placing the box.
+      setPlaying(false)
       if (!faceAvailable) {
         showToast('Face detection unavailable — install the Python sidecar')
         return
