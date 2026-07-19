@@ -40,11 +40,12 @@ except Exception as exc:  # pragma: no cover - environment dependent
     print(f"[sidecar] face_recognition unavailable: {exc}")
 
 try:
-    from PIL import Image  # type: ignore
+    from PIL import Image, ImageOps  # type: ignore
 
     PIL_OK = True
 except Exception as exc:
     Image = None
+    ImageOps = None
     PIL_OK = False
     print(f"[sidecar] Pillow unavailable: {exc}")
 
@@ -175,9 +176,12 @@ def load_image(path: str) -> Optional["np.ndarray"]:
             req = urllib.request.Request(path, headers={"User-Agent": "slideshow"})
             with urllib.request.urlopen(req, timeout=20) as resp:
                 data = resp.read()
-            img = Image.open(io.BytesIO(data)).convert("RGB")
+            img = Image.open(io.BytesIO(data))
         else:
-            img = Image.open(path).convert("RGB")
+            img = Image.open(path)
+        # Honour EXIF orientation so detected boxes line up with what the browser
+        # displays (the <img> element auto-applies orientation).
+        img = ImageOps.exif_transpose(img).convert("RGB")
         return np.array(img)
     except Exception as exc:
         print(f"[sidecar] load_image failed for {path}: {exc}")
@@ -397,6 +401,13 @@ class ScanReq(BaseModel):
     force: bool = False
 
 
+class DetectAtReq(BaseModel):
+    path: str
+    # Click location as normalized 0..1 coordinates relative to the image.
+    x: float
+    y: float
+
+
 class RelabelReq(BaseModel):
     faceId: int
     name: str
@@ -440,6 +451,110 @@ def faces_scan(req: ScanReq):
                 conn.commit()
             faces = detect_and_store(conn, req.path)
             return {"available": True, "faces": faces, "cached": False}
+        finally:
+            conn.close()
+
+
+# Size (in image pixels) of the manual box added when a Ctrl-click misses a face.
+MANUAL_BOX_SIZE = 50
+
+
+@app.post("/faces/detect-at")
+def faces_detect_at(req: DetectAtReq):
+    """Ctrl-click handler: find a detected face under the point, else drop a
+    fixed-size manual "Unknown" box centered on the click."""
+    if not (FACE_OK and PIL_OK):
+        return {"available": False, "face": None}
+    with _db_lock:
+        conn = get_db()
+        try:
+            image = load_image(req.path)
+            if image is None:
+                return {"available": True, "face": None, "error": "load failed"}
+            h, w = int(image.shape[0]), int(image.shape[1])
+            px = max(0, min(w - 1, int(round(req.x * w))))
+            py = max(0, min(h - 1, int(round(req.y * h))))
+
+            # 1. Re-use an existing stored face whose box already covers the point.
+            for row in conn.execute(
+                "SELECT id, top, right, bottom, left FROM image_faces WHERE path = ?",
+                (req.path,),
+            ).fetchall():
+                if row["left"] <= px <= row["right"] and row["top"] <= py <= row["bottom"]:
+                    return {
+                        "available": True,
+                        "face": _face_row(conn, row["id"]),
+                        "detected": True,
+                        "created": False,
+                    }
+
+            # 2. Run detection and pick a face containing the point (nearest center
+            #    if several overlap).
+            locations = face_recognition.face_locations(image, model="hog")
+            best = None
+            best_dist = None
+            for (top, right, bottom, left) in locations:
+                if left <= px <= right and top <= py <= bottom:
+                    cx, cy = (left + right) / 2, (top + bottom) / 2
+                    d = (cx - px) ** 2 + (cy - py) ** 2
+                    if best_dist is None or d < best_dist:
+                        best, best_dist = (top, right, bottom, left), d
+
+            if best is not None:
+                top, right, bottom, left = best
+                enc = face_recognition.face_encodings(image, [best])
+                encoding = enc[0] if enc else None
+                person_id = match_person(conn, encoding) if encoding is not None else None
+                if person_id is None:
+                    person_id = conn.execute(
+                        "INSERT INTO people(name, is_named) VALUES (?, 0)",
+                        (next_unknown_name(conn),),
+                    ).lastrowid
+                    if encoding is not None:
+                        conn.execute(
+                            "INSERT INTO ref_encodings(person_id, encoding) VALUES (?, ?)",
+                            (person_id, enc_to_blob(encoding)),
+                        )
+                enc_blob = enc_to_blob(encoding) if encoding is not None else None
+                face_id = conn.execute(
+                    """INSERT INTO image_faces(path, person_id, top, right, bottom,
+                                               left, img_w, img_h, encoding)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (req.path, person_id, top, right, bottom, left, w, h, enc_blob),
+                ).lastrowid
+                conn.commit()
+                return {
+                    "available": True,
+                    "face": _face_row(conn, face_id),
+                    "detected": True,
+                    "created": True,
+                }
+
+            # 3. No face under the point — add a fixed-size manual Unknown box.
+            #    Stored without an encoding so this hand-placed region can never
+            #    pollute automatic recognition; it is a manual label only.
+            half = MANUAL_BOX_SIZE // 2
+            top = max(0, py - half)
+            left = max(0, px - half)
+            bottom = min(h, top + MANUAL_BOX_SIZE)
+            right = min(w, left + MANUAL_BOX_SIZE)
+            person_id = conn.execute(
+                "INSERT INTO people(name, is_named) VALUES (?, 0)",
+                (next_unknown_name(conn),),
+            ).lastrowid
+            face_id = conn.execute(
+                """INSERT INTO image_faces(path, person_id, top, right, bottom,
+                                           left, img_w, img_h, encoding)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)""",
+                (req.path, person_id, top, right, bottom, left, w, h),
+            ).lastrowid
+            conn.commit()
+            return {
+                "available": True,
+                "face": _face_row(conn, face_id),
+                "detected": False,
+                "created": True,
+            }
         finally:
             conn.close()
 

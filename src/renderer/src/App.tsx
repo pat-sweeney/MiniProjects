@@ -25,6 +25,7 @@ import {
   initSidecar,
   relabelFace,
   scanFaces,
+  detectFaceAt,
   setMetadata
 } from './lib/sidecar'
 import { VoiceSession } from './lib/voice'
@@ -375,6 +376,43 @@ export default function App(): JSX.Element {
     [refreshFaces, showToast]
   )
 
+  /** Ctrl/⌘-click on the image: find a face at the point, else drop a manual box. */
+  const detectFaceAtPoint = useCallback(
+    async (x: number, y: number) => {
+      const { media: m, index: i, faces: cur } = stateRef.current
+      const it = m[i]
+      if (!it || it.kind !== 'image') return
+      if (!faceAvailable) {
+        showToast('Face detection unavailable — install the Python sidecar')
+        return
+      }
+      setDetecting(true)
+      try {
+        const res = await detectFaceAt(it.id, x, y)
+        if (!res?.available) {
+          showToast('Face detection unavailable')
+          return
+        }
+        if (!res.face) {
+          showToast('Could not add a face here')
+          return
+        }
+        const face = res.face
+        const merged = [...cur.filter((f) => f.faceId !== face.faceId), face]
+        setFaces(merged)
+        await persistFacesAsMetadata(it.id, merged)
+        showToast(
+          res.detected
+            ? `Found ${face.name}`
+            : `Added box — click it to label “${face.name}”`
+        )
+      } finally {
+        setDetecting(false)
+      }
+    },
+    [faceAvailable, showToast, persistFacesAsMetadata]
+  )
+
   // ---- Voice / LLM instruction handling ----
   const applyIntent = useCallback(
     async (intent: ParsedIntent) => {
@@ -552,6 +590,7 @@ export default function App(): JSX.Element {
               faces={faces}
               labels={labels}
               onRename={handleRenameFace}
+              onCtrlClickPoint={detectFaceAtPoint}
               onVideoDone={() => go(1)}
             />
           </div>

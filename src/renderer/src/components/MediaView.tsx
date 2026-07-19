@@ -11,6 +11,7 @@ interface Props {
   faces?: FaceBox[]
   labels?: PersonTag[]
   onRename?: (face: FaceBox, name: string) => void
+  onCtrlClickPoint?: (x: number, y: number) => void
   onVideoDone?: () => void
 }
 
@@ -23,6 +24,7 @@ export default function MediaView({
   faces = [],
   labels = [],
   onRename,
+  onCtrlClickPoint,
   onVideoDone
 }: Props): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -67,7 +69,22 @@ export default function MediaView({
 
   return (
     <div className="media-wrap">
-      <img src={item.src} alt={item.name} draggable={false} />
+      <img
+        src={item.src}
+        alt={item.name}
+        draggable={false}
+        onClick={(e) => {
+          // Ctrl/⌘-click: probe for a face at this point (see App.detectFaceAt).
+          if (!onCtrlClickPoint || !(e.ctrlKey || e.metaKey)) return
+          e.preventDefault()
+          e.stopPropagation()
+          const r = e.currentTarget.getBoundingClientRect()
+          if (r.width === 0 || r.height === 0) return
+          const x = (e.clientX - r.left) / r.width
+          const y = (e.clientY - r.top) / r.height
+          onCtrlClickPoint(Math.min(1, Math.max(0, x)), Math.min(1, Math.max(0, y)))
+        }}
+      />
       {faces.length > 0 && onRename ? (
         <FaceOverlay faces={faces} onRename={onRename} />
       ) : labels.length > 0 ? (

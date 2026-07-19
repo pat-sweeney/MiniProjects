@@ -41,6 +41,18 @@ export async function scanFaces(
   })
 }
 
+export async function detectFaceAt(
+  path: string,
+  x: number,
+  y: number
+): Promise<{ available: boolean; face: FaceBox | null; detected?: boolean } | null> {
+  return req('/faces/detect-at', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ path, x, y })
+  })
+}
+
 export async function listPeople(): Promise<Person[]> {
   return (await req<Person[]>('/people')) || []
 }
