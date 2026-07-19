@@ -4,6 +4,6 @@
 # requirements.txt and can be layered on top for a full-featured build.
 fastapi>=0.111
 uvicorn[standard]>=0.30
-pydantic>=2.7
+pydantic>=2.13.4
 numpy>=1.26
 pillow>=10.3
