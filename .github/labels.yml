@@ -1,0 +1,52 @@
+# Repository issue/PR labels, synced to GitHub by .github/workflows/labels.yml.
+# The names here line up with the categories in .github/release.yml so that
+# automatically generated release notes are grouped correctly.
+
+- name: feature
+  color: "1f883d"
+  description: New functionality
+- name: enhancement
+  color: "a2eeef"
+  description: Improvement to existing functionality
+- name: bug
+  color: "d73a4a"
+  description: Something isn't working
+- name: fix
+  color: "d73a4a"
+  description: A bug fix
+- name: slideshow
+  color: "5b8cff"
+  description: Slideshow playback, timing, transitions
+- name: media
+  color: "5b8cff"
+  description: Image/video loading and scanning
+- name: video
+  color: "5b8cff"
+  description: Video playback and audio
+- name: faces
+  color: "7c5bff"
+  description: Facial recognition and people database
+- name: voice
+  color: "7c5bff"
+  description: Voice recognition (Vosk)
+- name: llm
+  color: "7c5bff"
+  description: LLM instruction parsing (Ollama)
+- name: packaging
+  color: "fbca04"
+  description: electron-builder packaging and installers
+- name: build
+  color: "fbca04"
+  description: Build system and tooling
+- name: ci
+  color: "fbca04"
+  description: Continuous integration workflows
+- name: updater
+  color: "fbca04"
+  description: Auto-update (electron-updater)
+- name: documentation
+  color: "0075ca"
+  description: Documentation changes
+- name: ignore-for-release
+  color: "cccccc"
+  description: Exclude from generated release notes
