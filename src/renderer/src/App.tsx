@@ -12,6 +12,7 @@ import {
 } from '../../shared/types'
 import Controls from './components/Controls'
 import FileTree from './components/FileTree'
+import SearchBar from './components/SearchBar'
 import SettingsPanel from './components/SettingsPanel'
 import MetadataPanel from './components/MetadataPanel'
 import MediaView from './components/MediaView'
@@ -27,6 +28,7 @@ import {
   scanFaces,
   detectFaceAt,
   displayImageSrc,
+  searchMedia,
   setMetadata
 } from './lib/sidecar'
 import { VoiceSession } from './lib/voice'
@@ -52,6 +54,9 @@ export default function App(): JSX.Element {
   const [faces, setFaces] = useState<FaceBox[]>([])
   const [labels, setLabels] = useState<PersonTag[]>([])
   const [detecting, setDetecting] = useState(false)
+  const [showLabels, setShowLabels] = useState(true)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchCount, setSearchCount] = useState<number | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showTree, setShowTree] = useState(true)
   const [showMetadata, setShowMetadata] = useState(false)
@@ -67,6 +72,8 @@ export default function App(): JSX.Element {
   const clearPrevTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const voiceRef = useRef<VoiceSession | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Full unfiltered scan result; `media` may be a search-filtered subset of it.
+  const allMediaRef = useRef<MediaItem[]>([])
 
   // Refs mirroring state for use inside stable callbacks (voice/keyboard).
   const stateRef = useRef({ media, index, faces, settings, playing })
@@ -122,6 +129,8 @@ export default function App(): JSX.Element {
     try {
       let items = await window.api.scanMedia(s.localFolder, s.httpFolder)
       if (s.shuffle) items = shuffleArray(items)
+      allMediaRef.current = items
+      setSearchCount(null)
       setMedia(items)
       setIndex(0)
       setPrevItem(null)
@@ -234,6 +243,11 @@ export default function App(): JSX.Element {
             ? { ...mm, id: res.id!, src: res.src!, name: res.name!, relPath: newRel }
             : mm
         )
+      )
+      allMediaRef.current = allMediaRef.current.map((mm) =>
+        mm.id === it.id
+          ? { ...mm, id: res.id!, src: res.src!, name: res.name!, relPath: newRel }
+          : mm
       )
       if (
         oldMeta &&
@@ -528,6 +542,8 @@ export default function App(): JSX.Element {
         case 't': case 'T': setShowTree((v) => !v); break
         case 'v': case 'V': toggleVoice(); break
         case 'f': case 'F': detectFaces(); break
+        case 'l': case 'L': setShowLabels((v) => !v); break
+        case '/': e.preventDefault(); setSearchOpen((v) => !v); break
         default: break
       }
     }
@@ -554,6 +570,44 @@ export default function App(): JSX.Element {
     []
   )
 
+  // ---- Search (tags, date/year, person names) ----
+  const applyFilter = useCallback(
+    (subset: MediaItem[]) => {
+      setPrevItem(null)
+      if (clearPrevTimer.current) clearTimeout(clearPrevTimer.current)
+      setMedia(subset)
+      setIndex(0)
+    },
+    []
+  )
+
+  const runSearch = useCallback(
+    async (query: string) => {
+      const q = query.trim()
+      if (!q) {
+        setSearchCount(null)
+        applyFilter(allMediaRef.current)
+        return
+      }
+      const paths = await searchMedia({ q })
+      const matchSet = new Set(paths)
+      const subset = allMediaRef.current.filter((m) => matchSet.has(m.id))
+      setSearchCount(subset.length)
+      if (subset.length === 0) {
+        showToast(`No matches for “${q}”`)
+        return
+      }
+      applyFilter(subset)
+      showToast(`${subset.length} match${subset.length === 1 ? '' : 'es'} for “${q}”`)
+    },
+    [applyFilter, showToast]
+  )
+
+  const clearSearch = useCallback(() => {
+    setSearchCount(null)
+    applyFilter(allMediaRef.current)
+  }, [applyFilter])
+
   // ---- Render ----
   const enter = enterClass(resolvedTransition)
   const leave = leaveClass(resolvedTransition)
@@ -571,6 +625,13 @@ export default function App(): JSX.Element {
         onSuggestName={suggestName}
       />
       <div className="stage" style={tms}>
+        <SearchBar
+          open={searchOpen}
+          resultCount={searchCount}
+          onSearch={runSearch}
+          onClear={clearSearch}
+          onClose={() => setSearchOpen(false)}
+        />
         {prevItem && settings.transition !== 'none' && (
           <div className={`layer ${leave}`} key={`prev-${animKey}`}>
             <MediaView
@@ -590,6 +651,7 @@ export default function App(): JSX.Element {
               playing={playing}
               faces={faces}
               labels={labels}
+              showLabels={showLabels}
               onRename={handleRenameFace}
               onCtrlClickPoint={detectFaceAtPoint}
               onVideoDone={() => go(1)}
@@ -637,12 +699,16 @@ export default function App(): JSX.Element {
         faceAvailable={faceAvailable}
         detecting={detecting}
         labelCount={labels.length}
+        showLabels={showLabels}
+        searchOpen={searchOpen}
         voiceOn={voiceOn}
         onPlayPause={() => setPlaying((p) => !p)}
         onPrev={prev}
         onNext={next}
         onTransition={onTransitionQuick}
         onDetectFaces={detectFaces}
+        onToggleLabels={() => setShowLabels((v) => !v)}
+        onToggleSearch={() => setSearchOpen((v) => !v)}
         onToggleVoice={toggleVoice}
         onOpenMetadata={() => setShowMetadata(true)}
         onOpenSettings={() => setShowSettings(true)}

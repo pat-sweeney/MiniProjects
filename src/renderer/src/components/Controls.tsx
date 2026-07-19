@@ -11,12 +11,16 @@ interface Props {
   faceAvailable: boolean
   detecting: boolean
   labelCount: number
+  showLabels: boolean
+  searchOpen: boolean
   voiceOn: boolean
   onPlayPause: () => void
   onPrev: () => void
   onNext: () => void
   onTransition: (t: TransitionType) => void
   onDetectFaces: () => void
+  onToggleLabels: () => void
+  onToggleSearch: () => void
   onToggleVoice: () => void
   onOpenMetadata: () => void
   onOpenSettings: () => void
@@ -25,8 +29,9 @@ interface Props {
 export default function Controls(props: Props): JSX.Element {
   const {
     playing, current, index, total, transition, faceAvailable, detecting,
-    labelCount, voiceOn, onPlayPause, onPrev, onNext, onTransition,
-    onDetectFaces, onToggleVoice, onOpenMetadata, onOpenSettings
+    labelCount, showLabels, searchOpen, voiceOn, onPlayPause, onPrev, onNext,
+    onTransition, onDetectFaces, onToggleLabels, onToggleSearch, onToggleVoice,
+    onOpenMetadata, onOpenSettings
   } = props
 
   const isImage = current?.kind === 'image'
@@ -57,6 +62,13 @@ export default function Controls(props: Props): JSX.Element {
       <span className="spacer" />
 
       <button
+        className={'icon' + (searchOpen ? ' primary' : '')}
+        onClick={onToggleSearch}
+        title="Search tags, date, people (/)"
+      >
+        🔍 search
+      </button>
+      <button
         className={'icon' + (labelCount > 0 ? ' primary' : '')}
         onClick={onDetectFaces}
         disabled={!isImage || !faceAvailable || detecting}
@@ -67,6 +79,13 @@ export default function Controls(props: Props): JSX.Element {
         }
       >
         {detecting ? '⏳' : '🙂'} {labelCount > 0 ? labelCount : 'faces'}
+      </button>
+      <button
+        className={'icon' + (showLabels ? ' primary' : '')}
+        onClick={onToggleLabels}
+        title={showLabels ? 'Hide name labels (L)' : 'Show name labels (L)'}
+      >
+        {showLabels ? '🏷' : '🚫'} labels
       </button>
       <button className={'icon' + (voiceOn ? ' primary' : '')} onClick={onToggleVoice} title="Voice control (V)">
         🎤

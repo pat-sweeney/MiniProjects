@@ -787,6 +787,61 @@ def set_metadata(req: MetaReq):
             conn.close()
 
 
+@app.get("/search")
+def search_media(q: str = "", person: str = "", year: str = "", tag: str = ""):
+    """Find image paths matching tags, date/year, and/or person names.
+
+    A free-text `q` matches (OR) across description, place, year, tags, the
+    persisted people list, and recognized face names. The optional structured
+    `tag`, `year`, and `person` params add ANDed constraints. Returns the
+    distinct matching paths so the renderer can filter the slideshow to them.
+    """
+    with _db_lock:
+        conn = get_db()
+        try:
+            def meta_like(field: str, val: str) -> set:
+                rows = conn.execute(
+                    f"SELECT path FROM image_meta WHERE {field} LIKE ?",
+                    (f"%{val}%",),
+                ).fetchall()
+                return {r["path"] for r in rows}
+
+            def face_person_like(val: str) -> set:
+                rows = conn.execute(
+                    """SELECT DISTINCT f.path FROM image_faces f
+                         JOIN people p ON p.id = f.person_id
+                        WHERE p.name LIKE ? AND p.is_named = 1""",
+                    (f"%{val}%",),
+                ).fetchall()
+                return {r["path"] for r in rows}
+
+            constraints: list[set] = []
+            q = (q or "").strip()
+            if q:
+                s: set = set()
+                for fld in ("description", "place", "year", "tags", "people"):
+                    s |= meta_like(fld, q)
+                s |= face_person_like(q)
+                constraints.append(s)
+            if (tag or "").strip():
+                constraints.append(meta_like("tags", tag.strip()))
+            if (year or "").strip():
+                constraints.append(meta_like("year", year.strip()))
+            if (person or "").strip():
+                constraints.append(
+                    face_person_like(person.strip()) | meta_like("people", person.strip())
+                )
+
+            if not constraints:
+                return {"paths": []}
+            result = constraints[0]
+            for c in constraints[1:]:
+                result &= c
+            return {"paths": sorted(result)}
+        finally:
+            conn.close()
+
+
 # ---------------------------------------------------------------------------
 # Voice (Vosk) over WebSocket. Renderer streams 16kHz mono PCM16 frames.
 # ---------------------------------------------------------------------------

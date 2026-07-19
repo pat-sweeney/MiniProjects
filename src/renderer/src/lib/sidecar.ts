@@ -111,3 +111,24 @@ export async function setMetadata(meta: ImageMetadata): Promise<boolean> {
   })
   return !!r?.ok
 }
+
+/**
+ * Search the metadata/face database for images matching tags, date/year and/or
+ * person names. `q` is a free-text OR-match across all fields; `person`, `year`
+ * and `tag` add ANDed constraints. Returns the matching image paths (which are
+ * the MediaItem `id`s for local/http items).
+ */
+export async function searchMedia(params: {
+  q?: string
+  person?: string
+  year?: string
+  tag?: string
+}): Promise<string[]> {
+  const qs = new URLSearchParams()
+  if (params.q) qs.set('q', params.q)
+  if (params.person) qs.set('person', params.person)
+  if (params.year) qs.set('year', params.year)
+  if (params.tag) qs.set('tag', params.tag)
+  const r = await req<{ paths: string[] }>('/search?' + qs.toString())
+  return r?.paths || []
+}

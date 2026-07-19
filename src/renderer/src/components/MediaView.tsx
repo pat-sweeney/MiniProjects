@@ -11,6 +11,7 @@ interface Props {
   playing: boolean
   faces?: FaceBox[]
   labels?: PersonTag[]
+  showLabels?: boolean
   onRename?: (face: FaceBox, name: string) => void
   onCtrlClickPoint?: (x: number, y: number) => void
   onVideoDone?: () => void
@@ -24,6 +25,7 @@ export default function MediaView({
   playing,
   faces = [],
   labels = [],
+  showLabels = true,
   onRename,
   onCtrlClickPoint,
   onVideoDone
@@ -86,7 +88,7 @@ export default function MediaView({
           onCtrlClickPoint(Math.min(1, Math.max(0, x)), Math.min(1, Math.max(0, y)))
         }}
       />
-      {faces.length > 0 && onRename ? (
+      {!showLabels ? null : faces.length > 0 && onRename ? (
         <FaceOverlay faces={faces} onRename={onRename} />
       ) : labels.length > 0 ? (
         <LabelOverlay people={labels} />
