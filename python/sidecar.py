@@ -117,7 +117,36 @@ def init_db() -> None:
     if "people" not in cols:
         conn.execute("ALTER TABLE image_meta ADD COLUMN people TEXT DEFAULT ''")
     conn.commit()
+    _cleanup_orphan_unknowns(conn)
     conn.close()
+
+
+def _cleanup_orphan_unknowns(conn: sqlite3.Connection) -> None:
+    """Drop auto-created "Unknown" people that no longer own any faces.
+
+    An earlier /faces/relabel implementation copied a relabeled face's encoding
+    onto the named person but left the original encoding attached to the
+    "Unknown N" placeholder. Those placeholders (is_named=0 with no image_faces)
+    keep a duplicate reference encoding that ties with — and, by lower rowid,
+    beats — the named person during matching, so the same face keeps showing up
+    as Unknown in other pictures. They are safe to remove because the encoding
+    already lives on the named person.
+    """
+    orphans = conn.execute(
+        """SELECT id FROM people
+            WHERE is_named = 0
+              AND id NOT IN (SELECT DISTINCT person_id FROM image_faces)"""
+    ).fetchall()
+    if not orphans:
+        return
+    ids = [r["id"] for r in orphans]
+    placeholders = ",".join("?" for _ in ids)
+    conn.execute(
+        f"DELETE FROM ref_encodings WHERE person_id IN ({placeholders})", ids
+    )
+    conn.execute(f"DELETE FROM people WHERE id IN ({placeholders})", ids)
+    conn.commit()
+    print(f"[sidecar] cleaned up {len(ids)} orphaned Unknown identity(ies)")
 
 
 def enc_to_blob(enc: "np.ndarray") -> bytes:
@@ -452,18 +481,46 @@ def relabel_face(req: RelabelReq):
             ).fetchone()
             if not face:
                 return {"ok": False, "error": "face not found"}
-            person_id = _get_or_create_named_person(conn, req.name.strip())
-            conn.execute(
-                "UPDATE image_faces SET person_id = ? WHERE id = ?",
-                (person_id, req.faceId),
-            )
-            if face["encoding"]:
+            old_id = face["person_id"]
+            named_id = _get_or_create_named_person(conn, req.name.strip())
+            if old_id == named_id:
+                # Already this identity — nothing to move or duplicate.
+                conn.commit()
+                return {"ok": True, "personId": named_id, "name": req.name.strip()}
+
+            old = conn.execute(
+                "SELECT is_named FROM people WHERE id = ?", (old_id,)
+            ).fetchone()
+            if old and old["is_named"] == 0:
+                # The face currently belongs to an auto-created "Unknown"
+                # placeholder. Absorb that whole identity into the named person:
+                # move its reference encodings and every face across, then delete
+                # the placeholder. Leaving it behind would keep a duplicate
+                # encoding that shadows the named person on future matches (the
+                # source of "labeled here, still Unknown there").
                 conn.execute(
-                    "INSERT INTO ref_encodings(person_id, encoding) VALUES (?, ?)",
-                    (person_id, face["encoding"]),
+                    "UPDATE ref_encodings SET person_id = ? WHERE person_id = ?",
+                    (named_id, old_id),
                 )
+                conn.execute(
+                    "UPDATE image_faces SET person_id = ? WHERE person_id = ?",
+                    (named_id, old_id),
+                )
+                conn.execute("DELETE FROM people WHERE id = ?", (old_id,))
+            else:
+                # Reassigning from one named person to another: move just this
+                # face and learn its encoding for the new identity.
+                conn.execute(
+                    "UPDATE image_faces SET person_id = ? WHERE id = ?",
+                    (named_id, req.faceId),
+                )
+                if face["encoding"]:
+                    conn.execute(
+                        "INSERT INTO ref_encodings(person_id, encoding) VALUES (?, ?)",
+                        (named_id, face["encoding"]),
+                    )
             conn.commit()
-            return {"ok": True, "personId": person_id, "name": req.name.strip()}
+            return {"ok": True, "personId": named_id, "name": req.name.strip()}
         finally:
             conn.close()
 
