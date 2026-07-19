@@ -3,7 +3,7 @@
 # Core server (always required):
 fastapi>=0.111
 uvicorn[standard]>=0.30
-pydantic>=2.7
+pydantic>=2.13.4
 numpy>=1.26
 pillow>=10.3
 # HEIC/HEIF decoding for Apple photos (display transcode + face detection).
