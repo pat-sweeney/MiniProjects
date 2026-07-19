@@ -138,13 +138,29 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('file:delete', async (_e, filePath: string) => {
+    // Prefer the OS trash/recycle bin so deletes are recoverable. Network/NAS
+    // drives (e.g. a mapped Y:) often don't support the Recycle Bin, so fall
+    // back to a permanent delete and tell the renderer which happened.
     try {
-      // Move to the OS trash/recycle bin rather than unlinking, so the user can
-      // recover an accidental deletion.
       await shell.trashItem(filePath)
-      return { ok: true }
-    } catch (e: any) {
-      return { ok: false, error: e?.message ?? String(e) }
+      return { ok: true, trashed: true }
+    } catch {
+      try {
+        let lastErr: any
+        for (let attempt = 0; attempt < 5; attempt++) {
+          try {
+            await fs.unlink(filePath)
+            return { ok: true, trashed: false }
+          } catch (e: any) {
+            lastErr = e
+            if (e?.code !== 'EPERM' && e?.code !== 'EBUSY' && e?.code !== 'EACCES') throw e
+            await new Promise((r) => setTimeout(r, 150))
+          }
+        }
+        throw lastErr
+      } catch (e: any) {
+        return { ok: false, error: e?.message ?? String(e) }
+      }
     }
   })
 

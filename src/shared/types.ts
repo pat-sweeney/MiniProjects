@@ -111,6 +111,8 @@ export interface RenameResult {
 export interface DeleteResult {
   ok: boolean
   error?: string
+  /** true if sent to the OS Recycle Bin, false if permanently deleted */
+  trashed?: boolean
 }
 
 export interface ImageMetadata {

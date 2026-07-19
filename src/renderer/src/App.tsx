@@ -695,7 +695,11 @@ export default function App(): JSX.Element {
     setIndex(next.length === 0 ? 0 : Math.min(curIdx, next.length - 1))
     setPrevItem(null)
     if (searchCount !== null) setSearchCount((c) => (c === null ? c : Math.max(0, c - 1)))
-    showToast(`Moved “${it.name}” to the Recycle Bin`)
+    showToast(
+      res.trashed
+        ? `Moved “${it.name}” to the Recycle Bin`
+        : `Deleted “${it.name}”`
+    )
   }, [pendingDelete, searchCount, showToast])
 
   // ---- Render ----
@@ -778,7 +782,7 @@ export default function App(): JSX.Element {
       {pendingDelete && (
         <ConfirmDialog
           title="Delete file?"
-          message={`Move “${pendingDelete.name}” to the Recycle Bin?`}
+          message={`Delete “${pendingDelete.name}”? It will be sent to the Recycle Bin, or permanently deleted if that isn't available (e.g. on a network drive).`}
           confirmLabel="Delete"
           danger
           onConfirm={confirmDelete}
