@@ -29,6 +29,7 @@ import {
   relabelFace,
   deleteFace,
   scanFaces,
+  listFaces,
   detectFaceAt,
   displayImageSrc,
   searchMedia,
@@ -286,17 +287,25 @@ export default function App(): JSX.Element {
     }
   }, [playing, current, index, settings.intervalSeconds, go])
 
-  // ---- Load persisted people labels for the current image (no detection) ----
-  // Face detection is on-demand only; on display we just render the labels
-  // that were previously saved into the image's metadata.
+  // ---- Load persisted faces/labels for the current image (no detection) ----
+  // Prefer stored faces (they carry faceIds, so their labels stay editable and
+  // removable); fall back to read-only metadata labels if no DB rows exist.
   useEffect(() => {
     setFaces([])
     setLabels([])
     if (!current || current.kind !== 'image') return
     let alive = true
-    getMetadata(current.id).then((m) => {
+    const id = current.id
+    ;(async () => {
+      const stored = await listFaces(id)
+      if (!alive) return
+      if (stored.length > 0) {
+        setFaces(stored)
+        return
+      }
+      const m = await getMetadata(id)
       if (alive) setLabels(m.people || [])
-    })
+    })()
     return () => {
       alive = false
     }

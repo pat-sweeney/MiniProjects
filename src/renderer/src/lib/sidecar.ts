@@ -53,6 +53,11 @@ export async function scanFaces(
   })
 }
 
+export async function listFaces(path: string): Promise<FaceBox[]> {
+  const r = await req<{ faces: FaceBox[] }>('/faces/list?path=' + encodeURIComponent(path))
+  return r?.faces || []
+}
+
 export async function detectFaceAt(
   path: string,
   x: number,

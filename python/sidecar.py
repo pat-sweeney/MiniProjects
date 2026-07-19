@@ -512,6 +512,19 @@ def get_image(path: str, max: int = 3840):
     return Response(content=data, media_type="image/jpeg")
 
 
+@app.get("/faces/list")
+def faces_list(path: str):
+    """Return stored faces (with faceIds) for a path — a plain DB read that
+    works even when the face-recognition libs aren't loaded, so persisted
+    labels stay editable on display without re-running detection."""
+    with _db_lock:
+        conn = get_db()
+        try:
+            return {"faces": faces_for_path(conn, path)}
+        finally:
+            conn.close()
+
+
 @app.post("/faces/scan")
 def faces_scan(req: ScanReq):
     if not (FACE_OK and PIL_OK):
