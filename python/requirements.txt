@@ -1,7 +1,7 @@
 # Python sidecar dependencies for NAS Slideshow.
 #
 # Core server (always required):
-fastapi>=0.111
+fastapi>=0.139.2
 uvicorn[standard]>=0.30
 pydantic>=2.7
 numpy>=1.26

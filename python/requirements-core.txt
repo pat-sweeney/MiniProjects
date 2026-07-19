@@ -2,7 +2,7 @@
 # auto-fill. Used by CI to build a bundled sidecar quickly. The optional
 # facial-recognition (face_recognition/dlib) and voice (vosk) packages live in
 # requirements.txt and can be layered on top for a full-featured build.
-fastapi>=0.111
+fastapi>=0.139.2
 uvicorn[standard]>=0.30
 pydantic>=2.7
 numpy>=1.26
