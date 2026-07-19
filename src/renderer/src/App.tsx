@@ -80,19 +80,38 @@ export default function App(): JSX.Element {
 
   // ---- Startup ----
   useEffect(() => {
+    let cancelled = false
     ;(async () => {
       await initSidecar()
       const s = await window.api.getSettings()
       setSettings(s)
-      const h = await health()
-      setFaceAvailable(!!h?.face_recognition)
-      setVoiceAvailable(!!h?.vosk)
       if (s.localFolder || s.httpFolder) {
         await doScan(s)
       } else {
         setShowSettings(true)
       }
     })()
+    // The Python sidecar can take several seconds to import dlib / load the
+    // face-recognition models, so a single health check at startup often races
+    // ahead of it and leaves the Detect button permanently disabled. Poll until
+    // the capabilities report as ready (or we give up after ~60s). Resolve the
+    // sidecar URL first so we don't probe a stale/default endpoint.
+    ;(async () => {
+      await initSidecar()
+      for (let attempt = 0; attempt < 30 && !cancelled; attempt++) {
+        const h = await health()
+        if (cancelled) return
+        if (h) {
+          setFaceAvailable(!!h.face_recognition)
+          setVoiceAvailable(!!h.vosk)
+          if (h.face_recognition) return
+        }
+        await new Promise((r) => setTimeout(r, 2000))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -308,6 +327,10 @@ export default function App(): JSX.Element {
     try {
       const res = await scanFaces(it.id, true)
       if (!res?.available) {
+        // Sidecar may not have finished loading models — re-check so the button
+        // state self-corrects instead of staying stuck.
+        const h = await health()
+        setFaceAvailable(!!h?.face_recognition)
         showToast('Face detection unavailable')
         return
       }
