@@ -86,6 +86,28 @@ export interface Person {
   faceCount: number
 }
 
+/** Context gathered about a media item, used to ask the LLM for a filename. */
+export interface FilenameContext {
+  currentName: string
+  kind: MediaKind
+  description?: string
+  place?: string
+  year?: string
+  people?: string[]
+  dateTaken?: string
+  camera?: string
+}
+
+/** Result of renaming a local file on disk. */
+export interface RenameResult {
+  ok: boolean
+  error?: string
+  /** Updated identity fields when ok === true */
+  id?: string
+  src?: string
+  name?: string
+}
+
 export interface ImageMetadata {
   path: string
   description: string

@@ -3,6 +3,8 @@ import {
   AppSettings,
   DEFAULT_SETTINGS,
   FaceBox,
+  FilenameContext,
+  ImageMetadata,
   MediaItem,
   ParsedIntent,
   TransitionType
@@ -17,6 +19,7 @@ import UpdateToast from './components/UpdateToast'
 import { enterClass, leaveClass, resolveTransition } from './lib/transitions'
 import {
   getMetadata,
+  getExif,
   health,
   initSidecar,
   relabelFace,
@@ -133,6 +136,99 @@ export default function App(): JSX.Element {
   const next = useCallback(() => go(1), [go])
   const prev = useCallback(() => go(-1), [go])
   const goToIndex = useCallback((i: number) => go(i, true), [go])
+
+  // ---- File-tree rename + LLM-suggested names ----
+  const suggestName = useCallback(
+    async (idx: number): Promise<string | null> => {
+      const { media: m, settings: s } = stateRef.current
+      const it = m[idx]
+      if (!it) return null
+      const ctx: FilenameContext = { currentName: it.name, kind: it.kind }
+      try {
+        const meta = await getMetadata(it.id)
+        ctx.description = meta.description
+        ctx.place = meta.place
+        ctx.year = meta.year
+      } catch {
+        /* ignore */
+      }
+      if (it.kind === 'image') {
+        try {
+          const exif = await getExif(it.id)
+          if (!ctx.year && exif.year) ctx.year = exif.year
+          if (!ctx.place && exif.place) ctx.place = exif.place
+          ctx.dateTaken = exif.dateTaken
+          ctx.camera = exif.camera
+        } catch {
+          /* ignore */
+        }
+        if (s.faceRecognitionEnabled && faceAvailable) {
+          try {
+            const res = await scanFaces(it.id)
+            if (res?.available) {
+              ctx.people = res.faces
+                .map((f) => f.name)
+                .filter((n) => n && !/^unknown/i.test(n))
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      const r = await window.api.suggestFilename(s.ollamaUrl, s.ollamaModel, ctx)
+      return r?.name || null
+    },
+    [faceAvailable]
+  )
+
+  const renameItem = useCallback(
+    async (idx: number, newBaseName: string): Promise<boolean> => {
+      const it = stateRef.current.media[idx]
+      if (!it) return false
+      if (it.source !== 'local') {
+        showToast('Rename is only supported for local files')
+        return false
+      }
+      // Preserve any user metadata across the rename (sidecar keys it by path).
+      let oldMeta: ImageMetadata | null = null
+      try {
+        oldMeta = await getMetadata(it.id)
+      } catch {
+        /* ignore */
+      }
+      const res = await window.api.renameFile(it.id, newBaseName)
+      if (!res.ok || !res.id || !res.src || !res.name) {
+        showToast(res.error || 'Rename failed')
+        return false
+      }
+      const oldRel = it.relPath
+      const slash = Math.max(oldRel.lastIndexOf('/'), oldRel.lastIndexOf('\\'))
+      const newRel = (slash >= 0 ? oldRel.slice(0, slash + 1) : '') + res.name
+      setMedia((prev) =>
+        prev.map((mm, i) =>
+          i === idx
+            ? { ...mm, id: res.id!, src: res.src!, name: res.name!, relPath: newRel }
+            : mm
+        )
+      )
+      if (
+        oldMeta &&
+        (oldMeta.description ||
+          oldMeta.place ||
+          oldMeta.year ||
+          (oldMeta.tags && oldMeta.tags.length))
+      ) {
+        try {
+          await setMetadata({ ...oldMeta, path: res.id })
+        } catch {
+          /* ignore */
+        }
+      }
+      showToast(`Renamed to “${res.name}”`)
+      return true
+    },
+    [showToast]
+  )
 
   // ---- Auto-advance timer (images only; videos self-advance) ----
   useEffect(() => {
@@ -350,6 +446,8 @@ export default function App(): JSX.Element {
         open={showTree}
         onSelect={goToIndex}
         onToggle={() => setShowTree((v) => !v)}
+        onRename={renameItem}
+        onSuggestName={suggestName}
       />
       <div className="stage" style={tms}>
         {prevItem && settings.transition !== 'none' && (

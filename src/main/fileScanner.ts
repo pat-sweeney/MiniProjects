@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs'
-import { join, extname, relative, posix } from 'path'
+import { join, extname, relative, posix, dirname } from 'path'
 import { pathToFileURL } from 'url'
-import { MediaItem, MediaKind } from '../shared/types'
+import { MediaItem, MediaKind, RenameResult } from '../shared/types'
 
 const IMAGE_EXT = new Set([
   '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif', '.heic', '.avif'
@@ -139,3 +139,56 @@ export async function scanAll(
 }
 
 export { pathToFileURL }
+
+/**
+ * Rename a local media file on disk, keeping its original extension and
+ * directory. `newBaseName` is a user/LLM supplied name (with or without an
+ * extension). Returns the updated identity fields for the MediaItem.
+ */
+export async function renameLocalFile(
+  oldPath: string,
+  newBaseName: string
+): Promise<RenameResult> {
+  const ext = extname(oldPath)
+  const dir = dirname(oldPath)
+
+  // Strip path separators and characters that are invalid in file names.
+  let base = (newBaseName || '')
+    .replace(/[\\/]/g, '')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[<>:"|?*\u0000-\u001f]/g, '')
+    .trim()
+    .replace(/[. ]+$/g, '') // Windows disallows trailing dots/spaces
+
+  // If the user typed the extension too, don't double it up.
+  if (ext && base.toLowerCase().endsWith(ext.toLowerCase())) {
+    base = base.slice(0, base.length - ext.length).trim()
+  }
+  if (!base) return { ok: false, error: 'Please enter a valid file name' }
+
+  const newName = base + ext
+  const newPath = join(dir, newName)
+  if (newPath === oldPath) return { ok: false, error: 'Name unchanged' }
+
+  try {
+    // Refuse to clobber an existing different file (case-insensitive rename of
+    // the same file is still allowed on case-insensitive filesystems).
+    if (newPath.toLowerCase() !== oldPath.toLowerCase()) {
+      try {
+        await fs.access(newPath)
+        return { ok: false, error: 'A file with that name already exists' }
+      } catch {
+        /* target does not exist — good */
+      }
+    }
+    await fs.rename(oldPath, newPath)
+    return {
+      ok: true,
+      id: newPath,
+      src: 'app://media/' + encodeURIComponent(newPath),
+      name: newName
+    }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? String(e) }
+  }
+}

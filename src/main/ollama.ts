@@ -1,4 +1,4 @@
-import { ParsedIntent } from '../shared/types'
+import { FilenameContext, ParsedIntent } from '../shared/types'
 
 const SYSTEM_PROMPT = `You are the command parser for a photo/video slideshow app.
 The user speaks or types short instructions. Convert the instruction into a single JSON object.
@@ -94,6 +94,83 @@ function normalizeIntent(obj: any): ParsedIntent {
   if (obj?.year) intent.year = String(obj.year)
   if (Array.isArray(obj?.tags)) intent.tags = obj.tags.map((t: any) => String(t))
   return intent
+}
+
+const NAME_SYSTEM_PROMPT = `You suggest a concise, descriptive file name for a photo or video.
+You are given JSON with any known metadata (people in the image, place, year,
+date taken, camera, a description, and the current file name).
+
+Rules for the suggested name:
+- Base it on the most meaningful available info: people, place, year/date, then description.
+- Do NOT include a file extension.
+- Use only lowercase letters, digits, and hyphens. Replace spaces with hyphens.
+- Keep it under 60 characters. No prose, no explanation.
+- If very little info is available, make a reasonable name from what exists.
+
+Respond ONLY with a JSON object: {"name":"suggested-file-name"}
+Examples:
+Input: {"people":["Alice","Bob"],"place":"Paris","year":"1998"} -> {"name":"alice-bob-paris-1998"}
+Input: {"description":"birthday party at the lake","year":"2012"} -> {"name":"birthday-party-at-the-lake-2012"}
+Input: {"place":"Grand Canyon","dateTaken":"2019-07-04"} -> {"name":"grand-canyon-2019-07-04"}`
+
+/** Ask Ollama to suggest a filesystem-safe file name (no extension) for an item. */
+export async function suggestFilename(
+  ollamaUrl: string,
+  model: string,
+  ctx: FilenameContext
+): Promise<{ name: string; reason?: string }> {
+  const body = {
+    model,
+    stream: false,
+    format: 'json',
+    options: { temperature: 0.2 },
+    messages: [
+      { role: 'system', content: NAME_SYSTEM_PROMPT },
+      { role: 'user', content: JSON.stringify(compactContext(ctx)) }
+    ]
+  }
+  try {
+    const res = await fetch(`${ollamaUrl.replace(/\/$/, '')}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    if (!res.ok) return { name: '', reason: `Ollama HTTP ${res.status}` }
+    const data = (await res.json()) as OllamaChatResponse
+    const content = data.message?.content ?? data.response ?? ''
+    const parsed = extractJson(content)
+    const name = sanitizeName(parsed?.name)
+    if (!name) return { name: '', reason: 'No name produced' }
+    return { name }
+  } catch (err: any) {
+    return { name: '', reason: `Ollama unreachable: ${err?.message ?? err}` }
+  }
+}
+
+/** Drop empty/whitespace-only fields so the model isn't distracted by blanks. */
+function compactContext(ctx: FilenameContext): Record<string, unknown> {
+  const out: Record<string, unknown> = { currentName: ctx.currentName, kind: ctx.kind }
+  if (ctx.description?.trim()) out.description = ctx.description.trim()
+  if (ctx.place?.trim()) out.place = ctx.place.trim()
+  if (ctx.year?.trim()) out.year = ctx.year.trim()
+  if (ctx.dateTaken?.trim()) out.dateTaken = ctx.dateTaken.trim()
+  if (ctx.camera?.trim()) out.camera = ctx.camera.trim()
+  const people = (ctx.people || []).filter((p) => p && !/^unknown/i.test(p.trim()))
+  if (people.length) out.people = people
+  return out
+}
+
+/** Reduce an arbitrary LLM string to a safe base file name (no extension). */
+export function sanitizeName(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/\.[a-z0-9]{1,5}$/i, '') // strip an accidental extension
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    .replace(/-+$/g, '')
 }
 
 /** Simple health check for the Ollama server. */

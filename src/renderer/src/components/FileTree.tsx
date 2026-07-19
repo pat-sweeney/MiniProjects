@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { MediaItem } from '../../../shared/types'
 
 interface Props {
@@ -7,6 +7,8 @@ interface Props {
   open: boolean
   onSelect: (index: number) => void
   onToggle: () => void
+  onRename: (index: number, newBaseName: string) => Promise<boolean>
+  onSuggestName: (index: number) => Promise<string | null>
 }
 
 interface TreeNode {
@@ -46,27 +48,152 @@ function buildTree(items: MediaItem[]): TreeNode {
   return root
 }
 
+function splitName(name: string): { base: string; ext: string } {
+  const dot = name.lastIndexOf('.')
+  if (dot > 0) return { base: name.slice(0, dot), ext: name.slice(dot) }
+  return { base: name, ext: '' }
+}
+
+/** Inline editor shown when a file row is being renamed (F2). */
+function RenameInput({
+  initialBase,
+  ext,
+  depth,
+  onCommit,
+  onCancel,
+  onSuggest
+}: {
+  initialBase: string
+  ext: string
+  depth: number
+  onCommit: (base: string) => void
+  onCancel: () => void
+  onSuggest: () => Promise<string | null>
+}): JSX.Element {
+  const [value, setValue] = useState(initialBase)
+  const [suggestion, setSuggestion] = useState<string | null>(null)
+  const [suggesting, setSuggesting] = useState(true)
+  const touched = useRef(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+    inputRef.current?.select()
+    let alive = true
+    onSuggest()
+      .then((name) => {
+        if (!alive) return
+        if (name && name !== initialBase) {
+          setSuggestion(name)
+          // Auto-fill only if the user hasn't started typing.
+          if (!touched.current) {
+            setValue(name)
+            requestAnimationFrame(() => inputRef.current?.select())
+          }
+        }
+      })
+      .finally(() => alive && setSuggesting(false))
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <div className="tree-rename" style={{ paddingLeft: 8 + depth * 14 }}>
+      <div className="tree-rename-field">
+        <input
+          ref={inputRef}
+          value={value}
+          onChange={(e) => {
+            touched.current = true
+            setValue(e.target.value)
+          }}
+          onKeyDown={(e) => {
+            e.stopPropagation()
+            if (e.key === 'Enter') onCommit(value.trim())
+            else if (e.key === 'Escape') onCancel()
+          }}
+          onBlur={() => onCancel()}
+          spellCheck={false}
+        />
+        {ext && <span className="tree-rename-ext">{ext}</span>}
+      </div>
+      {suggesting && (
+        <span className="tree-suggest loading" title="Thinking of a name…">
+          ✨…
+        </span>
+      )}
+      {!suggesting && suggestion && (
+        <button
+          type="button"
+          className="tree-suggest"
+          title="Use suggested name"
+          // Keep the input focused so its blur handler doesn't cancel first.
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            touched.current = true
+            setValue(suggestion)
+            inputRef.current?.focus()
+            inputRef.current?.select()
+          }}
+        >
+          ✨ {suggestion}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function NodeRow({
   node,
   depth,
   currentId,
   items,
   collapsed,
+  renamingIndex,
   toggleCollapse,
-  onSelect
+  onSelect,
+  beginRename,
+  onRename,
+  onSuggestName,
+  endRename
 }: {
   node: TreeNode
   depth: number
   currentId?: string
   items: MediaItem[]
   collapsed: Set<string>
+  renamingIndex: number | null
   toggleCollapse: (path: string) => void
   onSelect: (index: number) => void
+  beginRename: (index: number) => void
+  onRename: (index: number, base: string) => Promise<boolean>
+  onSuggestName: (index: number) => Promise<string | null>
+  endRename: () => void
 }): JSX.Element {
   const isFolder = node.children.size > 0
   const isCollapsed = collapsed.has(node.path)
-  const isCurrent =
-    node.itemIndex !== undefined && items[node.itemIndex]?.id === currentId
+  const item = node.itemIndex !== undefined ? items[node.itemIndex] : undefined
+  const isCurrent = item?.id === currentId
+  const isEditing = node.itemIndex !== undefined && renamingIndex === node.itemIndex
+
+  if (isEditing && item) {
+    const { base, ext } = splitName(item.name)
+    return (
+      <RenameInput
+        initialBase={base}
+        ext={ext}
+        depth={depth}
+        onSuggest={() => onSuggestName(node.itemIndex!)}
+        onCommit={async (b) => {
+          const ok = await onRename(node.itemIndex!, b)
+          if (ok) endRename()
+        }}
+        onCancel={endRename}
+      />
+    )
+  }
 
   return (
     <>
@@ -77,10 +204,20 @@ function NodeRow({
           (isCurrent ? ' current' : '')
         }
         style={{ paddingLeft: 8 + depth * 14 }}
-        title={node.name}
+        title={isFolder ? node.name : node.name + ' — press F2 to rename'}
+        tabIndex={isFolder ? undefined : 0}
         onClick={() => {
           if (isFolder) toggleCollapse(node.path)
           else if (node.itemIndex !== undefined) onSelect(node.itemIndex)
+        }}
+        onKeyDown={(e) => {
+          if (isFolder || node.itemIndex === undefined) return
+          if (e.key === 'F2') {
+            e.preventDefault()
+            if (item?.source === 'local') beginRename(node.itemIndex)
+          } else if (e.key === 'Enter') {
+            onSelect(node.itemIndex)
+          }
         }}
       >
         <span className="tree-icon">
@@ -98,8 +235,13 @@ function NodeRow({
             currentId={currentId}
             items={items}
             collapsed={collapsed}
+            renamingIndex={renamingIndex}
             toggleCollapse={toggleCollapse}
             onSelect={onSelect}
+            beginRename={beginRename}
+            onRename={onRename}
+            onSuggestName={onSuggestName}
+            endRename={endRename}
           />
         ))}
     </>
@@ -107,8 +249,9 @@ function NodeRow({
 }
 
 export default function FileTree(props: Props): JSX.Element {
-  const { items, currentId, open, onSelect, onToggle } = props
+  const { items, currentId, open, onSelect, onToggle, onRename, onSuggestName } = props
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [renamingIndex, setRenamingIndex] = useState<number | null>(null)
 
   const root = useMemo(() => buildTree(items), [items])
 
@@ -146,12 +289,18 @@ export default function FileTree(props: Props): JSX.Element {
                 currentId={currentId}
                 items={items}
                 collapsed={collapsed}
+                renamingIndex={renamingIndex}
                 toggleCollapse={toggleCollapse}
                 onSelect={onSelect}
+                beginRename={setRenamingIndex}
+                onRename={onRename}
+                onSuggestName={onSuggestName}
+                endRename={() => setRenamingIndex(null)}
               />
             ))
           )}
         </div>
+        <div className="filetree-hint">Select a file and press F2 to rename</div>
       </aside>
 
       {!open && (

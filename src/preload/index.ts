@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { AppSettings, MediaItem, ParsedIntent } from '../shared/types'
+import {
+  AppSettings,
+  FilenameContext,
+  MediaItem,
+  ParsedIntent,
+  RenameResult
+} from '../shared/types'
 
 const api = {
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
@@ -15,6 +21,14 @@ const api = {
   ): Promise<ParsedIntent> => ipcRenderer.invoke('llm:parse', ollamaUrl, model, text),
   ollamaHealth: (ollamaUrl: string): Promise<boolean> =>
     ipcRenderer.invoke('llm:health', ollamaUrl),
+  suggestFilename: (
+    ollamaUrl: string,
+    model: string,
+    ctx: FilenameContext
+  ): Promise<{ name: string; reason?: string }> =>
+    ipcRenderer.invoke('llm:suggestName', ollamaUrl, model, ctx),
+  renameFile: (oldPath: string, newBaseName: string): Promise<RenameResult> =>
+    ipcRenderer.invoke('file:rename', oldPath, newBaseName),
   sidecarInfo: (): Promise<{ port: number; url: string }> =>
     ipcRenderer.invoke('sidecar:info'),
   onUpdateEvent: (cb: (type: string, payload?: unknown) => void): (() => void) => {

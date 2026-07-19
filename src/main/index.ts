@@ -3,10 +3,10 @@ import { join } from 'path'
 import { createReadStream, promises as fs } from 'fs'
 import { Readable } from 'stream'
 import { pathToFileURL } from 'url'
-import { AppSettings } from '../shared/types'
+import { AppSettings, FilenameContext } from '../shared/types'
 import { loadSettings, saveSettings } from './settings'
-import { scanAll } from './fileScanner'
-import { parseInstruction, ollamaHealth } from './ollama'
+import { scanAll, renameLocalFile } from './fileScanner'
+import { parseInstruction, ollamaHealth, suggestFilename } from './ollama'
 import { startSidecar, getSidecarPort, stopSidecar } from './pythonBridge'
 import { initAutoUpdater } from './updater'
 
@@ -126,6 +126,16 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('llm:health', async (_e, ollamaUrl: string) => ollamaHealth(ollamaUrl))
+
+  ipcMain.handle(
+    'llm:suggestName',
+    async (_e, ollamaUrl: string, model: string, ctx: FilenameContext) =>
+      suggestFilename(ollamaUrl, model, ctx)
+  )
+
+  ipcMain.handle('file:rename', async (_e, oldPath: string, newBaseName: string) =>
+    renameLocalFile(oldPath, newBaseName)
+  )
 
   ipcMain.handle('sidecar:info', async () => ({
     port: getSidecarPort(),
