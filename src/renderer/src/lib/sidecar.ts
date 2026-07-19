@@ -64,7 +64,7 @@ export async function renamePerson(personId: number, name: string): Promise<bool
 }
 
 export async function getMetadata(path: string): Promise<ImageMetadata> {  const r = await req<ImageMetadata>('/metadata?path=' + encodeURIComponent(path))
-  return r || { path, description: '', place: '', year: '', tags: [] }
+  return r || { path, description: '', place: '', year: '', tags: [], people: [] }
 }
 
 export interface ExifData {

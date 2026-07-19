@@ -107,10 +107,15 @@ def init_db() -> None:
             description TEXT DEFAULT '',
             place       TEXT DEFAULT '',
             year        TEXT DEFAULT '',
-            tags        TEXT DEFAULT ''
+            tags        TEXT DEFAULT '',
+            people      TEXT DEFAULT ''
         );
         """
     )
+    # Migrate older databases that predate the `people` column.
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(image_meta)").fetchall()]
+    if "people" not in cols:
+        conn.execute("ALTER TABLE image_meta ADD COLUMN people TEXT DEFAULT ''")
     conn.commit()
     conn.close()
 
@@ -379,6 +384,7 @@ class MetaReq(BaseModel):
     place: str = ""
     year: str = ""
     tags: List[str] = []
+    people: List[dict] = []
 
 
 @app.get("/health")
@@ -497,13 +503,22 @@ def get_metadata(path: str):
                     "place": "",
                     "year": "",
                     "tags": [],
+                    "people": [],
                 }
+            people = []
+            raw_people = r["people"] if "people" in r.keys() else ""
+            if raw_people:
+                try:
+                    people = json.loads(raw_people)
+                except Exception:
+                    people = []
             return {
                 "path": path,
                 "description": r["description"],
                 "place": r["place"],
                 "year": r["year"],
                 "tags": [t for t in (r["tags"] or "").split("\n") if t],
+                "people": people,
             }
         finally:
             conn.close()
@@ -515,19 +530,21 @@ def set_metadata(req: MetaReq):
         conn = get_db()
         try:
             conn.execute(
-                """INSERT INTO image_meta(path, description, place, year, tags)
-                   VALUES (?, ?, ?, ?, ?)
+                """INSERT INTO image_meta(path, description, place, year, tags, people)
+                   VALUES (?, ?, ?, ?, ?, ?)
                    ON CONFLICT(path) DO UPDATE SET
                      description = excluded.description,
                      place       = excluded.place,
                      year        = excluded.year,
-                     tags        = excluded.tags""",
+                     tags        = excluded.tags,
+                     people      = excluded.people""",
                 (
                     req.path,
                     req.description,
                     req.place,
                     req.year,
                     "\n".join(req.tags),
+                    json.dumps(req.people or []),
                 ),
             )
             conn.commit()

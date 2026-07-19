@@ -8,12 +8,15 @@ interface Props {
   index: number
   total: number
   transition: TransitionType
-  faceStatus: boolean
+  faceAvailable: boolean
+  detecting: boolean
+  labelCount: number
   voiceOn: boolean
   onPlayPause: () => void
   onPrev: () => void
   onNext: () => void
   onTransition: (t: TransitionType) => void
+  onDetectFaces: () => void
   onToggleVoice: () => void
   onOpenMetadata: () => void
   onOpenSettings: () => void
@@ -21,10 +24,12 @@ interface Props {
 
 export default function Controls(props: Props): JSX.Element {
   const {
-    playing, current, index, total, transition, faceStatus, voiceOn,
-    onPlayPause, onPrev, onNext, onTransition, onToggleVoice,
-    onOpenMetadata, onOpenSettings
+    playing, current, index, total, transition, faceAvailable, detecting,
+    labelCount, voiceOn, onPlayPause, onPrev, onNext, onTransition,
+    onDetectFaces, onToggleVoice, onOpenMetadata, onOpenSettings
   } = props
+
+  const isImage = current?.kind === 'image'
 
   return (
     <div className="controls">
@@ -51,9 +56,18 @@ export default function Controls(props: Props): JSX.Element {
 
       <span className="spacer" />
 
-      <span className={'badge ' + (faceStatus ? 'on' : 'off')}>
-        {faceStatus ? '● faces' : '○ faces'}
-      </span>
+      <button
+        className={'icon' + (labelCount > 0 ? ' primary' : '')}
+        onClick={onDetectFaces}
+        disabled={!isImage || !faceAvailable || detecting}
+        title={
+          faceAvailable
+            ? 'Detect & label faces (F)'
+            : 'Face detection unavailable (Python sidecar not running)'
+        }
+      >
+        {detecting ? '⏳' : '🙂'} {labelCount > 0 ? labelCount : 'faces'}
+      </button>
       <button className={'icon' + (voiceOn ? ' primary' : '')} onClick={onToggleVoice} title="Voice control (V)">
         🎤
       </button>

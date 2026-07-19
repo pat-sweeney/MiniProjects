@@ -7,6 +7,7 @@ import {
   ImageMetadata,
   MediaItem,
   ParsedIntent,
+  PersonTag,
   TransitionType
 } from '../../shared/types'
 import Controls from './components/Controls'
@@ -47,6 +48,8 @@ export default function App(): JSX.Element {
   const [animKey, setAnimKey] = useState(0)
   const [playing, setPlaying] = useState(true)
   const [faces, setFaces] = useState<FaceBox[]>([])
+  const [labels, setLabels] = useState<PersonTag[]>([])
+  const [detecting, setDetecting] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showTree, setShowTree] = useState(true)
   const [showMetadata, setShowMetadata] = useState(false)
@@ -243,27 +246,82 @@ export default function App(): JSX.Element {
     }
   }, [playing, current, index, settings.intervalSeconds, go])
 
-  // ---- Face recognition on current image ----
+  // ---- Load persisted people labels for the current image (no detection) ----
+  // Face detection is on-demand only; on display we just render the labels
+  // that were previously saved into the image's metadata.
   useEffect(() => {
     setFaces([])
+    setLabels([])
     if (!current || current.kind !== 'image') return
-    if (!settings.faceRecognitionEnabled || !faceAvailable) return
     let alive = true
-    scanFaces(current.id).then((res) => {
-      if (alive && res?.available) setFaces(res.faces)
+    getMetadata(current.id).then((m) => {
+      if (alive) setLabels(m.people || [])
     })
     return () => {
       alive = false
     }
-  }, [current, settings.faceRecognitionEnabled, faceAvailable])
+  }, [current])
+
+  /** Persist the given detected faces into the image's metadata as people. */
+  const persistFacesAsMetadata = useCallback(
+    async (itemId: string, detected: FaceBox[]): Promise<void> => {
+      const people: PersonTag[] = detected.map((f) => ({
+        name: f.name,
+        top: f.top,
+        right: f.right,
+        bottom: f.bottom,
+        left: f.left
+      }))
+      try {
+        const meta = await getMetadata(itemId)
+        await setMetadata({ ...meta, path: itemId, people })
+      } catch {
+        /* ignore */
+      }
+      const cur = stateRef.current.media[stateRef.current.index]
+      if (cur && cur.id === itemId) setLabels(people)
+    },
+    []
+  )
 
   const refreshFaces = useCallback(async () => {
     const { media: m, index: i } = stateRef.current
     const it = m[i]
     if (!it) return
     const res = await scanFaces(it.id)
-    if (res?.available) setFaces(res.faces)
-  }, [])
+    if (res?.available) {
+      setFaces(res.faces)
+      await persistFacesAsMetadata(it.id, res.faces)
+    }
+  }, [persistFacesAsMetadata])
+
+  /** On-demand face detection for the current image (triggered by a button). */
+  const detectFaces = useCallback(async () => {
+    const { media: m, index: i } = stateRef.current
+    const it = m[i]
+    if (!it || it.kind !== 'image') return
+    if (!faceAvailable) {
+      showToast('Face detection unavailable — install the Python sidecar')
+      return
+    }
+    setDetecting(true)
+    try {
+      const res = await scanFaces(it.id, true)
+      if (!res?.available) {
+        showToast('Face detection unavailable')
+        return
+      }
+      setFaces(res.faces)
+      await persistFacesAsMetadata(it.id, res.faces)
+      showToast(
+        res.faces.length
+          ? `Detected ${res.faces.length} face${res.faces.length === 1 ? '' : 's'}`
+          : 'No faces found in this image'
+      )
+    } finally {
+      setDetecting(false)
+    }
+  }, [faceAvailable, showToast, persistFacesAsMetadata])
 
   // ---- Preload neighbouring images so transitions show real content ----
   // Without this, an incoming image can still be downloading from the NAS
@@ -407,12 +465,13 @@ export default function App(): JSX.Element {
         case 's': case 'S': setShowSettings((v) => !v); break
         case 't': case 'T': setShowTree((v) => !v); break
         case 'v': case 'V': toggleVoice(); break
+        case 'f': case 'F': detectFaces(); break
         default: break
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [go, toggleVoice])
+  }, [go, toggleVoice, detectFaces])
 
   const saveSettings = useCallback(
     async (s: AppSettings) => {
@@ -468,7 +527,7 @@ export default function App(): JSX.Element {
               videoSeconds={settings.videoSeconds}
               playing={playing}
               faces={faces}
-              showFaces={settings.faceRecognitionEnabled && faceAvailable}
+              labels={labels}
               onRename={handleRenameFace}
               onVideoDone={() => go(1)}
             />
@@ -512,12 +571,15 @@ export default function App(): JSX.Element {
         index={index}
         total={media.length}
         transition={settings.transition}
-        faceStatus={settings.faceRecognitionEnabled && faceAvailable}
+        faceAvailable={faceAvailable}
+        detecting={detecting}
+        labelCount={labels.length}
         voiceOn={voiceOn}
         onPlayPause={() => setPlaying((p) => !p)}
         onPrev={prev}
         onNext={next}
         onTransition={onTransitionQuick}
+        onDetectFaces={detectFaces}
         onToggleVoice={toggleVoice}
         onOpenMetadata={() => setShowMetadata(true)}
         onOpenSettings={() => setShowSettings(true)}

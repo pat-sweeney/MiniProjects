@@ -269,6 +269,8 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px
   box-shadow: 0 0 0 1px rgba(0,0,0,0.4);
 }
 .face-box:hover { border-color: var(--accent-2); }
+.face-box.readonly { cursor: default; pointer-events: none; }
+.face-box.readonly:hover { border-color: var(--accent); }
 .face-label {
   position: absolute;
   bottom: -24px;

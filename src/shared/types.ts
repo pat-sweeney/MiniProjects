@@ -114,6 +114,17 @@ export interface ImageMetadata {
   place: string
   year: string
   tags: string[]
+  /** People identified in the image (render-time labels; not baked into the file) */
+  people?: PersonTag[]
+}
+
+/** A named face box (normalized 0..1 coords) persisted as image metadata. */
+export interface PersonTag {
+  name: string
+  top: number
+  right: number
+  bottom: number
+  left: number
 }
 
 /** Result of asking the LLM to parse a natural language instruction. */

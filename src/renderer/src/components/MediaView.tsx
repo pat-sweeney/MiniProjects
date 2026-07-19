@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react'
-import { FaceBox, MediaItem } from '../../../shared/types'
+import { FaceBox, MediaItem, PersonTag } from '../../../shared/types'
 import FaceOverlay from './FaceOverlay'
+import LabelOverlay from './LabelOverlay'
 
 interface Props {
   item: MediaItem
@@ -8,7 +9,7 @@ interface Props {
   videoSeconds: number
   playing: boolean
   faces?: FaceBox[]
-  showFaces?: boolean
+  labels?: PersonTag[]
   onRename?: (face: FaceBox, name: string) => void
   onVideoDone?: () => void
 }
@@ -20,7 +21,7 @@ export default function MediaView({
   videoSeconds,
   playing,
   faces = [],
-  showFaces = false,
+  labels = [],
   onRename,
   onVideoDone
 }: Props): JSX.Element {
@@ -67,7 +68,11 @@ export default function MediaView({
   return (
     <div className="media-wrap">
       <img src={item.src} alt={item.name} draggable={false} />
-      {showFaces && onRename && <FaceOverlay faces={faces} onRename={onRename} />}
+      {faces.length > 0 && onRename ? (
+        <FaceOverlay faces={faces} onRename={onRename} />
+      ) : labels.length > 0 ? (
+        <LabelOverlay people={labels} />
+      ) : null}
     </div>
   )
 }
