@@ -2,7 +2,7 @@
 #
 # Core server (always required):
 fastapi>=0.111
-uvicorn[standard]>=0.30
+uvicorn[standard]>=0.51.0
 pydantic>=2.7
 numpy>=1.26
 pillow>=10.3
