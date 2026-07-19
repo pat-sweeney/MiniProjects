@@ -5,5 +5,5 @@
 fastapi>=0.111
 uvicorn[standard]>=0.30
 pydantic>=2.7
-numpy>=1.26
+numpy>=2.5.1
 pillow>=10.3
