@@ -442,6 +442,10 @@ class RelabelReq(BaseModel):
     name: str
 
 
+class DeleteFaceReq(BaseModel):
+    faceId: int
+
+
 class RenameReq(BaseModel):
     personId: int
     name: str
@@ -683,6 +687,39 @@ def rename_person(req: RenameReq):
             )
             conn.commit()
             return {"ok": True}
+        finally:
+            conn.close()
+
+
+@app.post("/faces/delete")
+def delete_face(req: DeleteFaceReq):
+    """Delete a single detected-face instance (one image_faces row) without
+    affecting the same person in other images. If this leaves an auto-created
+    "Unknown" placeholder with no remaining faces, remove that placeholder too
+    so it can't shadow future recognition or waste an Unknown number."""
+    with _db_lock:
+        conn = get_db()
+        try:
+            row = conn.execute(
+                "SELECT person_id FROM image_faces WHERE id = ?", (req.faceId,)
+            ).fetchone()
+            if not row:
+                return {"ok": False, "error": "face not found"}
+            person_id = row["person_id"]
+            conn.execute("DELETE FROM image_faces WHERE id = ?", (req.faceId,))
+
+            person = conn.execute(
+                "SELECT is_named FROM people WHERE id = ?", (person_id,)
+            ).fetchone()
+            remaining = conn.execute(
+                "SELECT COUNT(*) AS c FROM image_faces WHERE person_id = ?",
+                (person_id,),
+            ).fetchone()["c"]
+            if person and person["is_named"] == 0 and remaining == 0:
+                conn.execute("DELETE FROM ref_encodings WHERE person_id = ?", (person_id,))
+                conn.execute("DELETE FROM people WHERE id = ?", (person_id,))
+            conn.commit()
+            return {"ok": True, "faceId": req.faceId}
         finally:
             conn.close()
 

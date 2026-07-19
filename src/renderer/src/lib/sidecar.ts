@@ -78,6 +78,15 @@ export async function relabelFace(faceId: number, name: string): Promise<boolean
   return !!r?.ok
 }
 
+export async function deleteFace(faceId: number): Promise<boolean> {
+  const r = await req<{ ok: boolean }>('/faces/delete', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ faceId })
+  })
+  return !!r?.ok
+}
+
 export async function renamePerson(personId: number, name: string): Promise<boolean> {
   const r = await req<{ ok: boolean }>('/people/rename', {
     method: 'POST',

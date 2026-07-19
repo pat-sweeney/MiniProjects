@@ -27,6 +27,7 @@ import {
   initSidecar,
   listPeople,
   relabelFace,
+  deleteFace,
   scanFaces,
   detectFaceAt,
   displayImageSrc,
@@ -409,6 +410,23 @@ export default function App(): JSX.Element {
     [refreshFaces, refreshKnownNames, showToast]
   )
 
+  /** Remove a single face-label instance from this image only. */
+  const handleDeleteFace = useCallback(
+    async (face: FaceBox) => {
+      const ok = await deleteFace(face.faceId)
+      if (!ok) {
+        showToast('Could not remove face')
+        return
+      }
+      const remaining = stateRef.current.faces.filter((f) => f.faceId !== face.faceId)
+      setFaces(remaining)
+      const it = stateRef.current.media[stateRef.current.index]
+      if (it) await persistFacesAsMetadata(it.id, remaining)
+      showToast('Removed face label')
+    },
+    [persistFacesAsMetadata, showToast]
+  )
+
   /** Ctrl/⌘-click on the image: find a face at the point, else drop a manual box. */
   const detectFaceAtPoint = useCallback(
     async (x: number, y: number) => {
@@ -714,6 +732,7 @@ export default function App(): JSX.Element {
               showLabels={showLabels}
               knownNames={knownNames}
               onRename={handleRenameFace}
+              onDeleteFace={handleDeleteFace}
               onCtrlClickPoint={detectFaceAtPoint}
               onVideoDone={() => go(1)}
             />

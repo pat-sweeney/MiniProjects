@@ -14,6 +14,7 @@ interface Props {
   showLabels?: boolean
   knownNames?: string[]
   onRename?: (face: FaceBox, name: string) => void
+  onDeleteFace?: (face: FaceBox) => void
   onCtrlClickPoint?: (x: number, y: number) => void
   onVideoDone?: () => void
 }
@@ -29,6 +30,7 @@ export default function MediaView({
   showLabels = true,
   knownNames = [],
   onRename,
+  onDeleteFace,
   onCtrlClickPoint,
   onVideoDone
 }: Props): JSX.Element {
@@ -91,7 +93,12 @@ export default function MediaView({
         }}
       />
       {!showLabels ? null : faces.length > 0 && onRename ? (
-        <FaceOverlay faces={faces} knownNames={knownNames} onRename={onRename} />
+        <FaceOverlay
+          faces={faces}
+          knownNames={knownNames}
+          onRename={onRename}
+          onDelete={onDeleteFace}
+        />
       ) : labels.length > 0 ? (
         <LabelOverlay people={labels} />
       ) : null}

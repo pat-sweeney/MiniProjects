@@ -5,10 +5,16 @@ interface Props {
   faces: FaceBox[]
   knownNames?: string[]
   onRename: (face: FaceBox, newName: string) => void
+  onDelete?: (face: FaceBox) => void
 }
 
 /** Draws clickable, editable boxes over detected faces (normalized coords). */
-export default function FaceOverlay({ faces, knownNames = [], onRename }: Props): JSX.Element {
+export default function FaceOverlay({
+  faces,
+  knownNames = [],
+  onRename,
+  onDelete
+}: Props): JSX.Element {
   const [editing, setEditing] = useState<number | null>(null)
   const [value, setValue] = useState('')
 
@@ -39,6 +45,20 @@ export default function FaceOverlay({ faces, knownNames = [], onRename }: Props)
             }}
             title="Click to label this person"
           >
+            {onDelete && (
+              <button
+                type="button"
+                className="face-remove"
+                title="Remove this face label"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (editing === f.faceId) setEditing(null)
+                  onDelete(f)
+                }}
+              >
+                ✕
+              </button>
+            )}
             {editing === f.faceId ? (
               <input
                 autoFocus
