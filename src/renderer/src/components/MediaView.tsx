@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import { FaceBox, MediaItem, PersonTag } from '../../../shared/types'
 import FaceOverlay from './FaceOverlay'
 import LabelOverlay from './LabelOverlay'
+import { displayImageSrc } from '../lib/sidecar'
 
 interface Props {
   item: MediaItem
@@ -70,7 +71,7 @@ export default function MediaView({
   return (
     <div className="media-wrap">
       <img
-        src={item.src}
+        src={displayImageSrc(item)}
         alt={item.name}
         draggable={false}
         onClick={(e) => {

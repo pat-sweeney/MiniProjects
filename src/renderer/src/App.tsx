@@ -26,6 +26,7 @@ import {
   relabelFace,
   scanFaces,
   detectFaceAt,
+  displayImageSrc,
   setMetadata
 } from './lib/sidecar'
 import { VoiceSession } from './lib/voice'
@@ -356,7 +357,7 @@ export default function App(): JSX.Element {
       const it = media[((idx % media.length) + media.length) % media.length]
       if (it && it.kind === 'image') {
         const img = new Image()
-        img.src = it.src
+        img.src = displayImageSrc(it)
       }
     }
     preloadAt(index + 1)

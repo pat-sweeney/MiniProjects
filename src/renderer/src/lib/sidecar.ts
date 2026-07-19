@@ -16,6 +16,18 @@ export function sidecarBase(): string {
   return baseUrl
 }
 
+/**
+ * Resolve the src to actually display for a media item. HEIC/HEIF can't be
+ * rendered by Chromium, so those are routed through the sidecar's /image
+ * transcoder; everything else uses the item's own src.
+ */
+export function displayImageSrc(item: { id: string; src: string; name: string }): string {
+  if (/\.(heic|heif)$/i.test(item.name)) {
+    return baseUrl + '/image?path=' + encodeURIComponent(item.id)
+  }
+  return item.src
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T | null> {
   try {
     const res = await fetch(baseUrl + path, init)

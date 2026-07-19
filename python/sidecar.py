@@ -19,12 +19,14 @@ import sqlite3
 import struct
 import threading
 import urllib.request
+from collections import OrderedDict
 from typing import List, Optional
 
 import numpy as np
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
@@ -48,6 +50,17 @@ except Exception as exc:
     ImageOps = None
     PIL_OK = False
     print(f"[sidecar] Pillow unavailable: {exc}")
+
+# Register the HEIF/HEIC opener so Image.open() can read .heic files (used for
+# face detection, EXIF and the /image display transcode).
+try:
+    import pillow_heif  # type: ignore
+
+    pillow_heif.register_heif_opener()
+    HEIF_OK = True
+except Exception as exc:
+    HEIF_OK = False
+    print(f"[sidecar] pillow-heif unavailable (.heic disabled): {exc}")
 
 try:
     from vosk import Model as VoskModel, KaldiRecognizer  # type: ignore
@@ -168,8 +181,9 @@ def next_unknown_name(conn: sqlite3.Connection) -> str:
 # ---------------------------------------------------------------------------
 # Image loading (local path or http url)
 # ---------------------------------------------------------------------------
-def load_image(path: str) -> Optional["np.ndarray"]:
-    if not (FACE_OK and PIL_OK):
+def open_oriented_rgb(path: str) -> Optional["Image.Image"]:
+    """Open a local/http image as an EXIF-oriented RGB PIL image (HEIC-aware)."""
+    if not PIL_OK:
         return None
     try:
         if path.startswith("http://") or path.startswith("https://"):
@@ -179,13 +193,18 @@ def load_image(path: str) -> Optional["np.ndarray"]:
             img = Image.open(io.BytesIO(data))
         else:
             img = Image.open(path)
-        # Honour EXIF orientation so detected boxes line up with what the browser
-        # displays (the <img> element auto-applies orientation).
-        img = ImageOps.exif_transpose(img).convert("RGB")
-        return np.array(img)
+        # Honour EXIF orientation so pixels match what the browser displays.
+        return ImageOps.exif_transpose(img).convert("RGB")
     except Exception as exc:
-        print(f"[sidecar] load_image failed for {path}: {exc}")
+        print(f"[sidecar] open_oriented_rgb failed for {path}: {exc}")
         return None
+
+
+def load_image(path: str) -> Optional["np.ndarray"]:
+    if not (FACE_OK and PIL_OK):
+        return None
+    img = open_oriented_rgb(path)
+    return np.array(img) if img is not None else None
 
 
 def load_pil(path: str):
@@ -433,7 +452,50 @@ def health():
         "ok": True,
         "face_recognition": FACE_OK and PIL_OK,
         "vosk": VOSK_OK and os.path.isdir(VOSK_MODEL_DIR),
+        "heic": HEIF_OK,
     }
+
+
+# In-memory cache of transcoded JPEGs so repeated display/preload requests for
+# the same (slow-to-decode) HEIC don't re-decode every time.
+_img_cache: "OrderedDict[str, bytes]" = OrderedDict()
+_img_cache_lock = threading.Lock()
+_IMG_CACHE_MAX = 12
+
+
+@app.get("/image")
+def get_image(path: str, max: int = 3840):
+    """Return any supported image (incl. HEIC) transcoded to JPEG for display.
+
+    Chromium cannot render HEIC in <img>, so the renderer points HEIC items at
+    this endpoint. Works for both local paths and http NAS URLs.
+    """
+    if not PIL_OK:
+        return Response(status_code=503)
+    try:
+        mtime = os.path.getmtime(path) if not path.startswith("http") else 0
+    except OSError:
+        mtime = 0
+    key = f"{path}|{max}|{mtime}"
+    with _img_cache_lock:
+        cached = _img_cache.get(key)
+        if cached is not None:
+            _img_cache.move_to_end(key)
+            return Response(content=cached, media_type="image/jpeg")
+    img = open_oriented_rgb(path)
+    if img is None:
+        return Response(status_code=404)
+    if max and max > 0:
+        img.thumbnail((max, max))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=90)
+    data = buf.getvalue()
+    with _img_cache_lock:
+        _img_cache[key] = data
+        _img_cache.move_to_end(key)
+        while len(_img_cache) > _IMG_CACHE_MAX:
+            _img_cache.popitem(last=False)
+    return Response(content=data, media_type="image/jpeg")
 
 
 @app.post("/faces/scan")

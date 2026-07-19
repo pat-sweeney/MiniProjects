@@ -6,6 +6,8 @@ uvicorn[standard]>=0.30
 pydantic>=2.7
 numpy>=1.26
 pillow>=10.3
+# HEIC/HEIF decoding for Apple photos (display transcode + face detection).
+pillow-heif>=0.16
 
 # Facial recognition (feature 4). dlib can require CMake + a C++ toolchain to
 # build; on Windows prefer installing a prebuilt dlib wheel first.
