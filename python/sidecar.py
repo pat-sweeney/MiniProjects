@@ -518,14 +518,15 @@ def faces_scan(req: ScanReq):
 
 
 # Size (in image pixels) of the manual box added when a Ctrl-click misses a face.
-MANUAL_BOX_SIZE = 50
+MANUAL_BOX_SIZE = 150
 
 
 @app.post("/faces/detect-at")
 def faces_detect_at(req: DetectAtReq):
-    """Ctrl-click handler: find a detected face under the point, else drop a
-    fixed-size manual "Unknown" box centered on the click."""
-    if not (FACE_OK and PIL_OK):
+    """Ctrl-click handler: drop a fixed-size manual "Unknown" box centered on
+    the click. Face detection is intentionally NOT run here — the click always
+    creates (or re-uses) a hand-placed box the user can then label."""
+    if not PIL_OK:
         return {"available": False, "face": None}
     with _db_lock:
         conn = get_db()
@@ -537,7 +538,8 @@ def faces_detect_at(req: DetectAtReq):
             px = max(0, min(w - 1, int(round(req.x * w))))
             py = max(0, min(h - 1, int(round(req.y * h))))
 
-            # 1. Re-use an existing stored face whose box already covers the point.
+            # 1. Re-use an existing stored face whose box already covers the point
+            #    so repeated clicks don't stack duplicate boxes.
             for row in conn.execute(
                 "SELECT id, top, right, bottom, left FROM image_faces WHERE path = ?",
                 (req.path,),
@@ -550,49 +552,7 @@ def faces_detect_at(req: DetectAtReq):
                         "created": False,
                     }
 
-            # 2. Run detection and pick a face containing the point (nearest center
-            #    if several overlap).
-            locations = face_recognition.face_locations(image, model="hog")
-            best = None
-            best_dist = None
-            for (top, right, bottom, left) in locations:
-                if left <= px <= right and top <= py <= bottom:
-                    cx, cy = (left + right) / 2, (top + bottom) / 2
-                    d = (cx - px) ** 2 + (cy - py) ** 2
-                    if best_dist is None or d < best_dist:
-                        best, best_dist = (top, right, bottom, left), d
-
-            if best is not None:
-                top, right, bottom, left = best
-                enc = face_recognition.face_encodings(image, [best])
-                encoding = enc[0] if enc else None
-                person_id = match_person(conn, encoding) if encoding is not None else None
-                if person_id is None:
-                    person_id = conn.execute(
-                        "INSERT INTO people(name, is_named) VALUES (?, 0)",
-                        (next_unknown_name(conn),),
-                    ).lastrowid
-                    if encoding is not None:
-                        conn.execute(
-                            "INSERT INTO ref_encodings(person_id, encoding) VALUES (?, ?)",
-                            (person_id, enc_to_blob(encoding)),
-                        )
-                enc_blob = enc_to_blob(encoding) if encoding is not None else None
-                face_id = conn.execute(
-                    """INSERT INTO image_faces(path, person_id, top, right, bottom,
-                                               left, img_w, img_h, encoding)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (req.path, person_id, top, right, bottom, left, w, h, enc_blob),
-                ).lastrowid
-                conn.commit()
-                return {
-                    "available": True,
-                    "face": _face_row(conn, face_id),
-                    "detected": True,
-                    "created": True,
-                }
-
-            # 3. No face under the point — add a fixed-size manual Unknown box.
+            # 2. Add a fixed-size manual Unknown box centered on the click.
             #    Stored without an encoding so this hand-placed region can never
             #    pollute automatic recognition; it is a manual label only.
             half = MANUAL_BOX_SIZE // 2
