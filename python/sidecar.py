@@ -192,7 +192,13 @@ def open_oriented_rgb(path: str) -> Optional["Image.Image"]:
                 data = resp.read()
             img = Image.open(io.BytesIO(data))
         else:
-            img = Image.open(path)
+            # Read the whole file and open from memory so we never keep an OS
+            # file handle open. A lingering handle on Windows causes sharing
+            # violations (re-open "Permission denied") and blocks renames/deletes
+            # of the file that is currently on screen.
+            with open(path, "rb") as fh:
+                data = fh.read()
+            img = Image.open(io.BytesIO(data))
         # Honour EXIF orientation so pixels match what the browser displays.
         return ImageOps.exif_transpose(img).convert("RGB")
     except Exception as exc:
@@ -217,7 +223,11 @@ def load_pil(path: str):
             with urllib.request.urlopen(req, timeout=20) as resp:
                 data = resp.read()
             return Image.open(io.BytesIO(data))
-        return Image.open(path)
+        # Read into memory so no OS handle lingers on the local file (see
+        # open_oriented_rgb for why this matters on Windows).
+        with open(path, "rb") as fh:
+            data = fh.read()
+        return Image.open(io.BytesIO(data))
     except Exception as exc:
         print(f"[sidecar] load_pil failed for {path}: {exc}")
         return None

@@ -181,13 +181,26 @@ export async function renameLocalFile(
         /* target does not exist — good */
       }
     }
-    await fs.rename(oldPath, newPath)
-    return {
-      ok: true,
-      id: newPath,
-      src: 'app://media/' + encodeURIComponent(newPath),
-      name: newName
+    // Retry briefly: on Windows a transient lock (thumbnailer, antivirus, an
+    // image decoder that just read the file) can make rename fail with
+    // EPERM/EBUSY for a few hundred milliseconds.
+    let lastErr: any
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        await fs.rename(oldPath, newPath)
+        return {
+          ok: true,
+          id: newPath,
+          src: 'app://media/' + encodeURIComponent(newPath),
+          name: newName
+        }
+      } catch (e: any) {
+        lastErr = e
+        if (e?.code !== 'EPERM' && e?.code !== 'EBUSY' && e?.code !== 'EACCES') throw e
+        await new Promise((r) => setTimeout(r, 150))
+      }
     }
+    throw lastErr
   } catch (e: any) {
     return { ok: false, error: e?.message ?? String(e) }
   }
