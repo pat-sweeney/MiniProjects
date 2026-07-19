@@ -3,16 +3,22 @@ import { FaceBox } from '../../../shared/types'
 
 interface Props {
   faces: FaceBox[]
+  knownNames?: string[]
   onRename: (face: FaceBox, newName: string) => void
 }
 
 /** Draws clickable, editable boxes over detected faces (normalized coords). */
-export default function FaceOverlay({ faces, onRename }: Props): JSX.Element {
+export default function FaceOverlay({ faces, knownNames = [], onRename }: Props): JSX.Element {
   const [editing, setEditing] = useState<number | null>(null)
   const [value, setValue] = useState('')
 
   return (
     <div className="face-overlay">
+      <datalist id="face-name-options">
+        {knownNames.map((n) => (
+          <option key={n} value={n} />
+        ))}
+      </datalist>
       {faces.map((f) => {
         const style: React.CSSProperties = {
           left: `${f.left * 100}%`,
@@ -39,7 +45,8 @@ export default function FaceOverlay({ faces, onRename }: Props): JSX.Element {
                 className="face-label"
                 style={{ width: 160 }}
                 value={value}
-                placeholder="Enter name…"
+                list="face-name-options"
+                placeholder="Enter or pick a name…"
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) => setValue(e.target.value)}
                 onKeyDown={(e) => {

@@ -25,6 +25,7 @@ import {
   getExif,
   health,
   initSidecar,
+  listPeople,
   relabelFace,
   scanFaces,
   detectFaceAt,
@@ -54,6 +55,7 @@ export default function App(): JSX.Element {
   const [playing, setPlaying] = useState(true)
   const [faces, setFaces] = useState<FaceBox[]>([])
   const [labels, setLabels] = useState<PersonTag[]>([])
+  const [knownNames, setKnownNames] = useState<string[]>([])
   const [detecting, setDetecting] = useState(false)
   const [showLabels, setShowLabels] = useState(true)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -332,6 +334,19 @@ export default function App(): JSX.Element {
     }
   }, [persistFacesAsMetadata])
 
+  /** Refresh the list of known (named) people for the label pick-list. */
+  const refreshKnownNames = useCallback(async () => {
+    const people = await listPeople()
+    const names = people
+      .map((p) => p.name)
+      .filter((n) => n && !/^unknown/i.test(n))
+    setKnownNames(Array.from(new Set(names)).sort((a, b) => a.localeCompare(b)))
+  }, [])
+
+  useEffect(() => {
+    refreshKnownNames()
+  }, [refreshKnownNames, faceAvailable])
+
   /** On-demand face detection for the current image (triggered by a button). */
   const detectFaces = useCallback(async () => {
     const { media: m, index: i } = stateRef.current
@@ -386,11 +401,12 @@ export default function App(): JSX.Element {
       if (ok) {
         showToast(`Labeled as “${name}”`)
         await refreshFaces()
+        await refreshKnownNames()
       } else {
         showToast('Could not label face')
       }
     },
-    [refreshFaces, showToast]
+    [refreshFaces, refreshKnownNames, showToast]
   )
 
   /** Ctrl/⌘-click on the image: find a face at the point, else drop a manual box. */
@@ -696,6 +712,7 @@ export default function App(): JSX.Element {
               faces={faces}
               labels={labels}
               showLabels={showLabels}
+              knownNames={knownNames}
               onRename={handleRenameFace}
               onCtrlClickPoint={detectFaceAtPoint}
               onVideoDone={() => go(1)}
