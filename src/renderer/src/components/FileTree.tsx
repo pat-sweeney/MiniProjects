@@ -21,11 +21,16 @@ interface TreeNode {
   kind?: 'image' | 'video'
 }
 
+/** NAS recycle-bin folders to hide from the tree (case-insensitive). */
+const EXCLUDED_DIRS = new Set(['#recyle', '#recycle', '@recycle', '$recycle.bin'])
+
 function buildTree(items: MediaItem[]): TreeNode {
   const root: TreeNode = { name: '', path: '', children: new Map() }
   items.forEach((item, index) => {
     const segments = item.relPath.split(/[\\/]+/).filter(Boolean)
     if (segments.length === 0) segments.push(item.name)
+    // Skip anything living under an excluded folder (e.g. a NAS recycle bin).
+    if (segments.some((s) => EXCLUDED_DIRS.has(s.toLowerCase()))) return
     let node = root
     segments.forEach((seg, i) => {
       const isLeaf = i === segments.length - 1
@@ -150,9 +155,9 @@ function NodeRow({
   depth,
   currentId,
   items,
-  collapsed,
+  expanded,
   renamingIndex,
-  toggleCollapse,
+  toggleExpand,
   onSelect,
   beginRename,
   onRename,
@@ -163,9 +168,9 @@ function NodeRow({
   depth: number
   currentId?: string
   items: MediaItem[]
-  collapsed: Set<string>
+  expanded: Set<string>
   renamingIndex: number | null
-  toggleCollapse: (path: string) => void
+  toggleExpand: (path: string) => void
   onSelect: (index: number) => void
   beginRename: (index: number) => void
   onRename: (index: number, base: string) => Promise<boolean>
@@ -173,7 +178,7 @@ function NodeRow({
   endRename: () => void
 }): JSX.Element {
   const isFolder = node.children.size > 0
-  const isCollapsed = collapsed.has(node.path)
+  const isCollapsed = !expanded.has(node.path)
   const item = node.itemIndex !== undefined ? items[node.itemIndex] : undefined
   const isCurrent = item?.id === currentId
   const isEditing = node.itemIndex !== undefined && renamingIndex === node.itemIndex
@@ -207,7 +212,7 @@ function NodeRow({
         title={isFolder ? node.name : node.name + ' — press F2 to rename'}
         tabIndex={isFolder ? undefined : 0}
         onClick={() => {
-          if (isFolder) toggleCollapse(node.path)
+          if (isFolder) toggleExpand(node.path)
           else if (node.itemIndex !== undefined) onSelect(node.itemIndex)
         }}
         onKeyDown={(e) => {
@@ -234,9 +239,9 @@ function NodeRow({
             depth={depth + 1}
             currentId={currentId}
             items={items}
-            collapsed={collapsed}
+            expanded={expanded}
             renamingIndex={renamingIndex}
-            toggleCollapse={toggleCollapse}
+            toggleExpand={toggleExpand}
             onSelect={onSelect}
             beginRename={beginRename}
             onRename={onRename}
@@ -250,13 +255,13 @@ function NodeRow({
 
 export default function FileTree(props: Props): JSX.Element {
   const { items, currentId, open, onSelect, onToggle, onRename, onSuggestName } = props
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [renamingIndex, setRenamingIndex] = useState<number | null>(null)
 
   const root = useMemo(() => buildTree(items), [items])
 
-  const toggleCollapse = (path: string): void => {
-    setCollapsed((prev) => {
+  const toggleExpand = (path: string): void => {
+    setExpanded((prev) => {
       const next = new Set(prev)
       if (next.has(path)) next.delete(path)
       else next.add(path)
@@ -288,9 +293,9 @@ export default function FileTree(props: Props): JSX.Element {
                 depth={0}
                 currentId={currentId}
                 items={items}
-                collapsed={collapsed}
+                expanded={expanded}
                 renamingIndex={renamingIndex}
-                toggleCollapse={toggleCollapse}
+                toggleExpand={toggleExpand}
                 onSelect={onSelect}
                 beginRename={setRenamingIndex}
                 onRename={onRename}
