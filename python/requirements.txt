@@ -1,0 +1,17 @@
+# Python sidecar dependencies for NAS Slideshow.
+#
+# Core server (always required):
+fastapi>=0.111
+uvicorn[standard]>=0.30
+pydantic>=2.7
+numpy>=1.26
+pillow>=10.3
+
+# Facial recognition (feature 4). dlib can require CMake + a C++ toolchain to
+# build; on Windows prefer installing a prebuilt dlib wheel first.
+face_recognition>=1.3.0
+# dlib>=19.24   # installed automatically as a dependency of face_recognition
+
+# Offline voice recognition (feature 5). Download a model into python/models/,
+# e.g. https://alphacephei.com/vosk/models  (vosk-model-small-en-us-0.15)
+vosk>=0.3.45

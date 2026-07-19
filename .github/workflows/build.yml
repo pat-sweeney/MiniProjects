@@ -1,0 +1,71 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Python sidecar build deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller -r python/requirements-core.txt
+
+      - name: Bundle Python sidecar
+        run: npm run py:bundle
+
+      - name: Build renderer + main
+        run: npm run build
+
+      # Publish to a GitHub Release when building a v* tag, otherwise just package.
+      - name: Package (and publish on tag)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          npx electron-builder
+          ${{ startsWith(github.ref, 'refs/tags/') && '--publish always' || '--publish never' }}
+
+      - name: Upload build artifacts
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nas-slideshow-${{ matrix.os }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.zip
+            release/latest*.yml
+          if-no-files-found: ignore
+          retention-days: 7

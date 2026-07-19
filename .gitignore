@@ -1,0 +1,20 @@
+node_modules/
+out/
+dist/
+release/
+dist-sidecar/*
+!dist-sidecar/.gitkeep
+*.tsbuildinfo
+.DS_Store
+*.log
+
+# Python
+python/__pycache__/
+python/.venv/
+python/*.pyc
+python/models/
+slideshow.db
+
+# Env / config
+.env
+config.json
