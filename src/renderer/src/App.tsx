@@ -166,6 +166,22 @@ export default function App(): JSX.Element {
     if (res?.available) setFaces(res.faces)
   }, [])
 
+  // ---- Preload neighbouring images so transitions show real content ----
+  // Without this, an incoming image can still be downloading from the NAS
+  // while its layer animates, so swipes/zooms look like a blank "pop" (fade).
+  useEffect(() => {
+    if (media.length === 0) return
+    const preloadAt = (idx: number): void => {
+      const it = media[((idx % media.length) + media.length) % media.length]
+      if (it && it.kind === 'image') {
+        const img = new Image()
+        img.src = it.src
+      }
+    }
+    preloadAt(index + 1)
+    preloadAt(index - 1)
+  }, [index, media])
+
   const handleRenameFace = useCallback(
     async (face: FaceBox, name: string) => {
       const ok = await relabelFace(face.faceId, name)
