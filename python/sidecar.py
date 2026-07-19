@@ -532,7 +532,7 @@ def faces_scan(req: ScanReq):
 
 
 # Size (in image pixels) of the manual box added when a Ctrl-click misses a face.
-MANUAL_BOX_SIZE = 150
+MANUAL_BOX_SIZE = 50
 
 
 @app.post("/faces/detect-at")
