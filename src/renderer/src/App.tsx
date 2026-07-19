@@ -12,6 +12,7 @@ import {
 } from '../../shared/types'
 import Controls from './components/Controls'
 import FileTree from './components/FileTree'
+import ConfirmDialog from './components/ConfirmDialog'
 import SearchBar from './components/SearchBar'
 import SettingsPanel from './components/SettingsPanel'
 import MetadataPanel from './components/MetadataPanel'
@@ -57,6 +58,7 @@ export default function App(): JSX.Element {
   const [showLabels, setShowLabels] = useState(true)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchCount, setSearchCount] = useState<number | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<MediaItem | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showTree, setShowTree] = useState(true)
   const [showMetadata, setShowMetadata] = useState(false)
@@ -544,6 +546,12 @@ export default function App(): JSX.Element {
         case 'f': case 'F': detectFaces(); break
         case 'l': case 'L': setShowLabels((v) => !v); break
         case '/': e.preventDefault(); setSearchOpen((v) => !v); break
+        case 'Delete': {
+          e.preventDefault()
+          const { media: m, index: i } = stateRef.current
+          if (m[i]) setPendingDelete(m[i])
+          break
+        }
         default: break
       }
     }
@@ -608,6 +616,35 @@ export default function App(): JSX.Element {
     applyFilter(allMediaRef.current)
   }, [applyFilter])
 
+  // ---- Delete (with confirmation) ----
+  const requestDeleteIndex = useCallback((idx: number) => {
+    const it = stateRef.current.media[idx]
+    if (it) setPendingDelete(it)
+  }, [])
+
+  const confirmDelete = useCallback(async () => {
+    const it = pendingDelete
+    setPendingDelete(null)
+    if (!it) return
+    if (it.source !== 'local') {
+      showToast('Delete is only supported for local files')
+      return
+    }
+    const res = await window.api.deleteFile(it.id)
+    if (!res.ok) {
+      showToast(res.error || 'Delete failed')
+      return
+    }
+    allMediaRef.current = allMediaRef.current.filter((m) => m.id !== it.id)
+    const { media: cur, index: curIdx } = stateRef.current
+    const next = cur.filter((m) => m.id !== it.id)
+    setMedia(next)
+    setIndex(next.length === 0 ? 0 : Math.min(curIdx, next.length - 1))
+    setPrevItem(null)
+    if (searchCount !== null) setSearchCount((c) => (c === null ? c : Math.max(0, c - 1)))
+    showToast(`Moved “${it.name}” to the Recycle Bin`)
+  }, [pendingDelete, searchCount, showToast])
+
   // ---- Render ----
   const enter = enterClass(resolvedTransition)
   const leave = leaveClass(resolvedTransition)
@@ -623,6 +660,7 @@ export default function App(): JSX.Element {
         onToggle={() => setShowTree((v) => !v)}
         onRename={renameItem}
         onSuggestName={suggestName}
+        onDelete={requestDeleteIndex}
       />
       <div className="stage" style={tms}>
         <SearchBar
@@ -681,6 +719,17 @@ export default function App(): JSX.Element {
       </div>
 
       {toast && <div className="toast">{toast}</div>}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete file?"
+          message={`Move “${pendingDelete.name}” to the Recycle Bin?`}
+          confirmLabel="Delete"
+          danger
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
 
       <UpdateToast />
 

@@ -9,6 +9,7 @@ interface Props {
   onToggle: () => void
   onRename: (index: number, newBaseName: string) => Promise<boolean>
   onSuggestName: (index: number) => Promise<string | null>
+  onDelete: (index: number) => void
 }
 
 interface TreeNode {
@@ -162,6 +163,7 @@ function NodeRow({
   beginRename,
   onRename,
   onSuggestName,
+  onDelete,
   endRename
 }: {
   node: TreeNode
@@ -175,6 +177,7 @@ function NodeRow({
   beginRename: (index: number) => void
   onRename: (index: number, base: string) => Promise<boolean>
   onSuggestName: (index: number) => Promise<string | null>
+  onDelete: (index: number) => void
   endRename: () => void
 }): JSX.Element {
   const isFolder = node.children.size > 0
@@ -220,6 +223,10 @@ function NodeRow({
           if (e.key === 'F2') {
             e.preventDefault()
             if (item?.source === 'local') beginRename(node.itemIndex)
+          } else if (e.key === 'Delete') {
+            e.preventDefault()
+            e.stopPropagation()
+            onDelete(node.itemIndex)
           } else if (e.key === 'Enter') {
             onSelect(node.itemIndex)
           }
@@ -229,6 +236,19 @@ function NodeRow({
           {isFolder ? (isCollapsed ? '▸' : '▾') : node.kind === 'video' ? '🎞' : '🖼'}
         </span>
         <span className="tree-name">{node.name}</span>
+        {!isFolder && node.itemIndex !== undefined && (
+          <button
+            type="button"
+            className="tree-delete"
+            title="Delete file"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(node.itemIndex!)
+            }}
+          >
+            🗑
+          </button>
+        )}
       </div>
       {isFolder &&
         !isCollapsed &&
@@ -246,6 +266,7 @@ function NodeRow({
             beginRename={beginRename}
             onRename={onRename}
             onSuggestName={onSuggestName}
+            onDelete={onDelete}
             endRename={endRename}
           />
         ))}
@@ -254,7 +275,8 @@ function NodeRow({
 }
 
 export default function FileTree(props: Props): JSX.Element {
-  const { items, currentId, open, onSelect, onToggle, onRename, onSuggestName } = props
+  const { items, currentId, open, onSelect, onToggle, onRename, onSuggestName, onDelete } =
+    props
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [renamingIndex, setRenamingIndex] = useState<number | null>(null)
 
@@ -300,6 +322,7 @@ export default function FileTree(props: Props): JSX.Element {
                 beginRename={setRenamingIndex}
                 onRename={onRename}
                 onSuggestName={onSuggestName}
+                onDelete={onDelete}
                 endRename={() => setRenamingIndex(null)}
               />
             ))

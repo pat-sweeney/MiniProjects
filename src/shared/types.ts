@@ -108,6 +108,11 @@ export interface RenameResult {
   name?: string
 }
 
+export interface DeleteResult {
+  ok: boolean
+  error?: string
+}
+
 export interface ImageMetadata {
   path: string
   description: string

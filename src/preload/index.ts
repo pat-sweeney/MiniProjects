@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import {
   AppSettings,
+  DeleteResult,
   FilenameContext,
   MediaItem,
   ParsedIntent,
@@ -29,6 +30,8 @@ const api = {
     ipcRenderer.invoke('llm:suggestName', ollamaUrl, model, ctx),
   renameFile: (oldPath: string, newBaseName: string): Promise<RenameResult> =>
     ipcRenderer.invoke('file:rename', oldPath, newBaseName),
+  deleteFile: (filePath: string): Promise<DeleteResult> =>
+    ipcRenderer.invoke('file:delete', filePath),
   sidecarInfo: (): Promise<{ port: number; url: string }> =>
     ipcRenderer.invoke('sidecar:info'),
   onUpdateEvent: (cb: (type: string, payload?: unknown) => void): (() => void) => {

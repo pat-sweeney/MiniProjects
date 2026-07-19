@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, protocol, net, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, protocol, net, dialog, shell } from 'electron'
 import { join } from 'path'
 import { createReadStream, promises as fs } from 'fs'
 import { Readable } from 'stream'
@@ -136,6 +136,17 @@ function registerIpc(): void {
   ipcMain.handle('file:rename', async (_e, oldPath: string, newBaseName: string) =>
     renameLocalFile(oldPath, newBaseName)
   )
+
+  ipcMain.handle('file:delete', async (_e, filePath: string) => {
+    try {
+      // Move to the OS trash/recycle bin rather than unlinking, so the user can
+      // recover an accidental deletion.
+      await shell.trashItem(filePath)
+      return { ok: true }
+    } catch (e: any) {
+      return { ok: false, error: e?.message ?? String(e) }
+    }
+  })
 
   ipcMain.handle('sidecar:info', async () => ({
     port: getSidecarPort(),

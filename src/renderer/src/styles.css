@@ -36,6 +36,8 @@ button {
 button:hover { background: #2a2a3a; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.primary:hover { background: #4a7bf0; }
+button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+button.danger:hover { background: #e0524b; }
 button.icon { padding: 8px 10px; min-width: 42px; }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -120,7 +122,16 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px
 .tree-row.current { background: rgba(91, 140, 255, 0.22); color: #fff; }
 .tree-row.folder { color: var(--text); }
 .tree-icon { flex: 0 0 auto; width: 16px; text-align: center; }
-.tree-name { overflow: hidden; text-overflow: ellipsis; }
+.tree-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.tree-delete {
+  flex: 0 0 auto;
+  padding: 0 4px; min-width: 0;
+  background: none; border: none; color: var(--muted);
+  opacity: 0; font-size: 13px; line-height: 1;
+}
+.tree-row:hover .tree-delete,
+.tree-row:focus-within .tree-delete { opacity: 0.75; }
+.tree-delete:hover { background: none; opacity: 1; color: var(--danger); }
 
 .filetree-hint {
   flex: 0 0 auto;
@@ -372,6 +383,22 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px
   border-radius: 8px; padding: 8px 10px; color: inherit; font-size: 14px;
 }
 .search-bar .search-count { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+/* ---------- Modal dialog ---------- */
+.modal-backdrop {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.55); z-index: 50;
+  animation: fadeIn 0.15s ease;
+}
+.modal {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 14px; padding: 22px 24px; width: min(440px, 86%);
+  box-shadow: 0 16px 50px rgba(0,0,0,0.6);
+}
+.modal h2 { margin: 0 0 12px; font-size: 18px; }
+.modal .modal-message { color: var(--muted); margin: 0 0 20px; word-break: break-word; }
+.modal .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
 .voice-hud {
   position: absolute;
