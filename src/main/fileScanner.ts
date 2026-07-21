@@ -33,6 +33,8 @@ export async function scanLocalFolder(root: string): Promise<MediaItem[]> {
     for (const entry of entries) {
       const full = join(dir, entry.name)
       if (entry.isDirectory()) {
+        // Skip Synology's NAS recycle bin folder (e.g. "#recycle").
+        if (entry.name.toLowerCase() === '#recycle') continue
         await walk(full)
       } else if (entry.isFile()) {
         const kind = kindForExt(extname(entry.name))
@@ -101,6 +103,9 @@ export async function scanHttpFolder(rootUrl: string): Promise<MediaItem[]> {
       // Only stay within the root tree.
       if (!abs.startsWith(base)) continue
       if (abs.endsWith('/')) {
+        // Skip Synology's NAS recycle bin folder (e.g. "#recycle/").
+        if (decodeURIComponent(abs).toLowerCase().replace(/\/$/, '').endsWith('/#recycle'))
+          continue
         await walk(abs, depth + 1)
       } else {
         const clean = abs.split('?')[0]
