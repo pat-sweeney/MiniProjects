@@ -357,6 +357,7 @@ def match_person(conn: sqlite3.Connection, encoding: "np.ndarray") -> Optional[i
 
 
 def detect_and_store(conn: sqlite3.Connection, path: str) -> List[dict]:
+    print(f"[sidecar] detecting faces: {path}", flush=True)
     image = load_image(path)
     if image is None:
         return []

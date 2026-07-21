@@ -422,6 +422,7 @@ export default function App(): JSX.Element {
     let done = 0
     for (const p of pending) {
       if (batchAbortRef.current) break
+      console.log(`[batch] processing ${done + 1}/${pending.length}: ${p}`)
       try {
         const res = await scanFaces(p)
         // If the sidecar reports it can't detect, stop early rather than spin.
