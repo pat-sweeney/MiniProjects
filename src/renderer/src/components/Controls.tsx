@@ -10,6 +10,8 @@ interface Props {
   transition: TransitionType
   faceAvailable: boolean
   detecting: boolean
+  batchRunning: boolean
+  batchProgress: { done: number; total: number } | null
   labelCount: number
   showLabels: boolean
   searchOpen: boolean
@@ -19,6 +21,7 @@ interface Props {
   onNext: () => void
   onTransition: (t: TransitionType) => void
   onDetectFaces: () => void
+  onToggleBatch: () => void
   onToggleLabels: () => void
   onToggleSearch: () => void
   onToggleVoice: () => void
@@ -29,9 +32,9 @@ interface Props {
 export default function Controls(props: Props): JSX.Element {
   const {
     playing, current, index, total, transition, faceAvailable, detecting,
-    labelCount, showLabels, searchOpen, voiceOn, onPlayPause, onPrev, onNext,
-    onTransition, onDetectFaces, onToggleLabels, onToggleSearch, onToggleVoice,
-    onOpenMetadata, onOpenSettings
+    batchRunning, batchProgress, labelCount, showLabels, searchOpen, voiceOn,
+    onPlayPause, onPrev, onNext, onTransition, onDetectFaces, onToggleBatch,
+    onToggleLabels, onToggleSearch, onToggleVoice, onOpenMetadata, onOpenSettings
   } = props
 
   const isImage = current?.kind === 'image'
@@ -79,6 +82,20 @@ export default function Controls(props: Props): JSX.Element {
         }
       >
         {detecting ? '⏳' : '🙂'} {labelCount > 0 ? labelCount : 'faces'}
+      </button>
+      <button
+        className={'icon' + (batchRunning ? ' primary' : '')}
+        onClick={onToggleBatch}
+        disabled={!faceAvailable}
+        title={
+          faceAvailable
+            ? 'Auto-detect faces on all un-processed images in the background'
+            : 'Face detection unavailable (Python sidecar not running)'
+        }
+      >
+        {batchRunning
+          ? `⏹ ${batchProgress ? `${batchProgress.done}/${batchProgress.total}` : '…'}`
+          : '⚙ auto'}
       </button>
       <button
         className={'icon' + (showLabels ? ' primary' : '')}

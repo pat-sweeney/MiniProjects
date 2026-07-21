@@ -30,6 +30,7 @@ import {
   deleteFace,
   scanFaces,
   listFaces,
+  pendingFacePaths,
   detectFaceAt,
   displayImageSrc,
   searchMedia,
@@ -59,6 +60,10 @@ export default function App(): JSX.Element {
   const [labels, setLabels] = useState<PersonTag[]>([])
   const [knownNames, setKnownNames] = useState<string[]>([])
   const [detecting, setDetecting] = useState(false)
+  const [batchRunning, setBatchRunning] = useState(false)
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(
+    null
+  )
   const [showLabels, setShowLabels] = useState(true)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchCount, setSearchCount] = useState<number | null>(null)
@@ -80,6 +85,8 @@ export default function App(): JSX.Element {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Full unfiltered scan result; `media` may be a search-filtered subset of it.
   const allMediaRef = useRef<MediaItem[]>([])
+  // Abort flag for the background batch face-detection runner.
+  const batchAbortRef = useRef(false)
 
   // Refs mirroring state for use inside stable callbacks (voice/keyboard).
   const stateRef = useRef({ media, index, faces, settings, playing })
@@ -390,6 +397,67 @@ export default function App(): JSX.Element {
       setDetecting(false)
     }
   }, [faceAvailable, showToast, persistFacesAsMetadata])
+
+  // ---- Background batch face detection ----
+  // Walks all images, running detection on only those not yet processed, without
+  // displaying them. Runs independently of the slideshow and is start/stoppable.
+  const runBatchDetection = useCallback(async () => {
+    if (!faceAvailable) {
+      showToast('Face detection unavailable — install the Python sidecar')
+      return
+    }
+    const images = allMediaRef.current.filter((m) => m.kind === 'image')
+    if (images.length === 0) {
+      showToast('No images to process')
+      return
+    }
+    const pending = await pendingFacePaths(images.map((m) => m.id))
+    if (pending.length === 0) {
+      showToast('All images have already been processed')
+      return
+    }
+    batchAbortRef.current = false
+    setBatchRunning(true)
+    setBatchProgress({ done: 0, total: pending.length })
+    let done = 0
+    for (const p of pending) {
+      if (batchAbortRef.current) break
+      try {
+        const res = await scanFaces(p)
+        // If the sidecar reports it can't detect, stop early rather than spin.
+        if (res && res.available === false) {
+          showToast('Face detection became unavailable — stopping')
+          break
+        }
+        // Reflect results live if the processed image is the one on screen.
+        const cur = stateRef.current.media[stateRef.current.index]
+        if (cur && cur.id === p && res?.faces) setFaces(res.faces)
+      } catch {
+        /* skip files that fail to decode/detect */
+      }
+      done++
+      setBatchProgress({ done, total: pending.length })
+    }
+    const finished = !batchAbortRef.current
+    setBatchRunning(false)
+    setBatchProgress(null)
+    await refreshKnownNames()
+    showToast(
+      finished
+        ? `Auto-detect complete — processed ${done} image${done === 1 ? '' : 's'}`
+        : `Auto-detect stopped — processed ${done} image${done === 1 ? '' : 's'}`
+    )
+  }, [faceAvailable, showToast, refreshKnownNames])
+
+  const toggleBatchDetection = useCallback(() => {
+    if (batchRunning) batchAbortRef.current = true
+    else runBatchDetection()
+  }, [batchRunning, runBatchDetection])
+
+  // Ensure a running batch is aborted if the component unmounts.
+  useEffect(() => () => {
+    batchAbortRef.current = true
+  }, [])
 
   // ---- Preload neighbouring images so transitions show real content ----
   // Without this, an incoming image can still be downloading from the NAS
@@ -806,6 +874,8 @@ export default function App(): JSX.Element {
         transition={settings.transition}
         faceAvailable={faceAvailable}
         detecting={detecting}
+        batchRunning={batchRunning}
+        batchProgress={batchProgress}
         labelCount={labels.length}
         showLabels={showLabels}
         searchOpen={searchOpen}
@@ -815,6 +885,7 @@ export default function App(): JSX.Element {
         onNext={next}
         onTransition={onTransitionQuick}
         onDetectFaces={detectFaces}
+        onToggleBatch={toggleBatchDetection}
         onToggleLabels={() => setShowLabels((v) => !v)}
         onToggleSearch={() => setSearchOpen((v) => !v)}
         onToggleVoice={toggleVoice}

@@ -124,6 +124,10 @@ def init_db() -> None:
             tags        TEXT DEFAULT '',
             people      TEXT DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS face_scans (
+            path TEXT PRIMARY KEY,
+            ts   TEXT DEFAULT CURRENT_TIMESTAMP
+        );
         """
     )
     # Migrate older databases that predate the `people` column.
@@ -446,6 +450,10 @@ class DeleteFaceReq(BaseModel):
     faceId: int
 
 
+class PendingReq(BaseModel):
+    paths: List[str]
+
+
 class RenameReq(BaseModel):
     personId: int
     name: str
@@ -539,7 +547,36 @@ def faces_scan(req: ScanReq):
                 conn.execute("DELETE FROM image_faces WHERE path = ?", (req.path,))
                 conn.commit()
             faces = detect_and_store(conn, req.path)
+            # Record that this path has been through detection so batch runs can
+            # skip it next time even when zero faces were found.
+            conn.execute(
+                "INSERT OR REPLACE INTO face_scans(path) VALUES (?)", (req.path,)
+            )
+            conn.commit()
             return {"available": True, "faces": faces, "cached": False}
+        finally:
+            conn.close()
+
+
+@app.post("/faces/pending")
+def faces_pending(req: PendingReq):
+    """Given candidate image paths, return the subset that has NOT yet been run
+    through face detection — used by the background batch runner so it only
+    processes new images. A path counts as done if it was scanned (face_scans)
+    or already has stored faces (image_faces)."""
+    with _db_lock:
+        conn = get_db()
+        try:
+            scanned = {
+                r["path"] for r in conn.execute("SELECT path FROM face_scans").fetchall()
+            }
+            with_faces = {
+                r["path"]
+                for r in conn.execute("SELECT DISTINCT path FROM image_faces").fetchall()
+            }
+            done = scanned | with_faces
+            pending = [p for p in req.paths if p not in done]
+            return {"pending": pending, "total": len(req.paths), "done": len(req.paths) - len(pending)}
         finally:
             conn.close()
 

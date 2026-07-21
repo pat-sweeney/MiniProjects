@@ -58,6 +58,16 @@ export async function listFaces(path: string): Promise<FaceBox[]> {
   return r?.faces || []
 }
 
+/** Given candidate image paths, return the subset not yet run through detection. */
+export async function pendingFacePaths(paths: string[]): Promise<string[]> {
+  const r = await req<{ pending: string[] }>('/faces/pending', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ paths })
+  })
+  return r?.pending || []
+}
+
 export async function detectFaceAt(
   path: string,
   x: number,
